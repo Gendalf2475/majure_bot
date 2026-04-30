@@ -36,7 +36,7 @@ async def handle_start(
         "Топики:\n"
         f"{build_topic_lines(topics_config)}\n\n"
         "Пример использования:\n"
-        "/cmd list"
+        "напишите list в нужном топике"
     )
     await message.answer(text)
 
@@ -55,7 +55,7 @@ async def handle_help(
         "/servers — список серверов\n"
         "/status — проверить доступность RCON-серверов\n"
         "/players — онлайн игроков на всех серверах\n"
-        "/cmd <команда> — выполнить RCON-команду в текущем топике\n"
+        "RCON в топике — напишите Minecraft-команду обычным сообщением\n"
         "/grant <user_id> <topic_key> — выдать доступ к режиму\n"
         "/revoke <user_id> <topic_key> — отозвать доступ к режиму\n"
         "/access — показать выданные режимы\n"
@@ -66,10 +66,9 @@ async def handle_help(
         "🎮 Команды серверов:\n"
         f"{build_server_command_lines(servers_config)}\n\n"
         "Примеры:\n"
-        "/cmd list\n"
-        "/cmd say Проверка\n"
-        "/lobby whitelist add Gendalf2475\n"
-        "/polit kick PlayerName Причина\n\n"
+        "list\n"
+        "say Проверка\n"
+        "/polit list\n\n"
         "✅ Разрешённые Minecraft-команды:\n"
         f"{build_allowed_commands_text(servers_config)}"
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -19,7 +19,7 @@ from app.utils.validation import is_minecraft_command_allowed, parse_telegram_co
 topic_commands_router = Router()
 
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
-NO_TOPIC_MESSAGE = "❌ Команда /cmd работает только внутри топика, привязанного к серверу."
+NO_TOPIC_MESSAGE = "❌ RCON-команды работают только внутри топика, привязанного к серверу."
 UNKNOWN_TOPIC_MESSAGE = "❌ Этот топик не привязан к серверу в topics.yml."
 ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам из ADMIN_IDS."
 
@@ -34,9 +34,49 @@ async def handle_topic_command(
 ) -> None:
     _, minecraft_command = parse_telegram_command(message.text or "")
     if not minecraft_command:
-        await message.answer("❌ Укажите команду Minecraft.\nПример: /cmd list")
+        await message.answer("❌ Укажите команду Minecraft.\nПример: напишите list в нужном топике")
         return
 
+    await _execute_topic_minecraft_command(
+        message,
+        minecraft_command,
+        settings,
+        servers_config,
+        topics_config,
+        topic_access_store,
+    )
+
+
+@topic_commands_router.message(F.text & ~F.text.startswith("/") & F.message_thread_id)
+async def handle_topic_text_command(
+    message: Message,
+    settings: BotSettings,
+    servers_config: ServersConfig,
+    topics_config: TopicsConfig,
+    topic_access_store: TopicAccessStore,
+) -> None:
+    minecraft_command = (message.text or "").strip()
+    if not minecraft_command:
+        return
+
+    await _execute_topic_minecraft_command(
+        message,
+        minecraft_command,
+        settings,
+        servers_config,
+        topics_config,
+        topic_access_store,
+    )
+
+
+async def _execute_topic_minecraft_command(
+    message: Message,
+    minecraft_command: str,
+    settings: BotSettings,
+    servers_config: ServersConfig,
+    topics_config: TopicsConfig,
+    topic_access_store: TopicAccessStore,
+) -> None:
     topic = await _get_topic_for_message(message, topics_config)
     if topic is None:
         return
@@ -138,7 +178,7 @@ async def handle_access_list(
         return
 
     if is_admin_user(target_user_id, settings):
-        await message.answer("✅ Администратор из ADMIN_IDS имеет доступ ко всем режимам.")
+        await message.answer(_format_superadmin_access(target_user_id, message, topics_config))
         return
 
     topic_keys = topic_access_store.get_user_topics(target_user_id)
@@ -230,3 +270,19 @@ def _format_topic_keys(topic_keys: list[str], topics_config: TopicsConfig) -> st
         else:
             lines.append(f"• {topic.display_name} ({topic.key})")
     return "\n".join(lines)
+
+
+def _format_superadmin_access(
+    target_user_id: int,
+    message: Message,
+    topics_config: TopicsConfig,
+) -> str:
+    if target_user_id == _get_user_id(message):
+        prefix = "✅ Вы суперадмин из ADMIN_IDS."
+    else:
+        prefix = f"✅ Пользователь {target_user_id} — суперадмин из ADMIN_IDS."
+
+    if not topics_config.topics:
+        return f"{prefix}\nДоступны все режимы, но topics.yml пока пуст."
+    topic_lines = _format_topic_keys(sorted(topics_config.topics), topics_config)
+    return f"{prefix}\nДоступны все режимы:\n{topic_lines}"

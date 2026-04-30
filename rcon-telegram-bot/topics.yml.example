@@ -1,15 +1,10 @@
 topics:
-  lobby:
-    display_name: "Лобби"
-    server: "lobby"
-    thread_id: 11
-
   test:
     display_name: "Тест"
     server: "test"
     thread_id: 22
 
-  survival:
-    display_name: "Выживание"
-    server: "survival"
+  polit:
+    display_name: "Полит"
+    server: "polit"
     thread_id: 33

@@ -1,24 +1,17 @@
 servers:
-  lobby:
-    display_name: "Lobby"
-    host: "127.0.0.1"
-    port: 25575
-    password: "CHANGE_ME"
-    telegram_command: "lobby"
-
   test:
-    display_name: "Test"
+    display_name: "Тест"
     host: "127.0.0.1"
     port: 25576
     password: "CHANGE_ME"
     telegram_command: "test"
 
-  survival:
-    display_name: "Survival"
+  polit:
+    display_name: "Полит"
     host: "127.0.0.1"
     port: 25577
     password: "CHANGE_ME"
-    telegram_command: "survival"
+    telegram_command: "polit"
 
 allowed_commands:
   - "list"

@@ -1,9 +1,4 @@
 topics:
-  lobby:
-    display_name: "Лобби"
-    server: "lobby"
-    thread_id: 11
-
   test:
     display_name: "Тест"
     server: "test"

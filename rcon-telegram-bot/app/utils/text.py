@@ -46,7 +46,7 @@ def build_topic_lines(topics_config: TopicsConfig) -> str:
     if not topics_config.topics:
         return "нет настроенных топиков"
     return "\n".join(
-        f"• {topic.display_name} — /cmd в топике, ключ доступа: {topic.key}"
+        f"• {topic.display_name} — пишите RCON-команды в топике, ключ доступа: {topic.key}"
         for topic in topics_config.topics.values()
     )
 

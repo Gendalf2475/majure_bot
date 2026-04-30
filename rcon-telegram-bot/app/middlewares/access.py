@@ -32,18 +32,25 @@ class AccessMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         text = event.text or ""
-        if not text.startswith("/"):
+        is_topic_text_command = (
+            bool(text.strip())
+            and not text.startswith("/")
+            and event.message_thread_id is not None
+        )
+        if not text.startswith("/") and not is_topic_text_command:
             return await handler(event, data)
 
-        command, _ = parse_telegram_command(text)
+        command = ""
+        if text.startswith("/"):
+            command, _ = parse_telegram_command(text)
         if command == "chatid":
             # /chatid работает в любом чате, чтобы можно было узнать ID нужной беседы.
             return await handler(event, data)
 
-        # Все остальные команды бот выполняет только в одной разрешённой беседе.
+        # Все команды и RCON-текст в топиках бот выполняет только в одной разрешённой беседе.
         if event.chat.id != self.settings.allowed_chat_id:
             logger.warning(
-                "Command from wrong chat: user_id=%s chat_id=%s",
+                "Bot action from wrong chat: user_id=%s chat_id=%s",
                 event.from_user.id if event.from_user else None,
                 event.chat.id,
             )

@@ -56,10 +56,10 @@ async def main() -> None:
     # Регистрируем обработчики обычных команд: /start, /help, /servers, /status и т.д.
     dispatcher.include_router(common_router)
 
-    # Регистрируем команды топиков: /cmd, /grant, /revoke, /access.
+    # Регистрируем команды и обычный текст в топиках: RCON, /grant, /revoke, /access.
     dispatcher.include_router(topic_commands_router)
 
-    # Регистрируем обработчик серверных команд: /lobby, /test, /polit и другие из servers.yml.
+    # Регистрируем обработчик серверных команд: /test, /polit и другие из servers.yml.
     dispatcher.include_router(server_commands_router)
 
     # Запускаем long polling: бот постоянно ждёт новые сообщения из Telegram.

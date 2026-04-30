@@ -33,11 +33,18 @@ class CommandCooldownMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         text = event.text or ""
-        if not text.startswith("/"):
+        is_topic_text_command = (
+            bool(text.strip())
+            and not text.startswith("/")
+            and event.message_thread_id is not None
+        )
+        if not text.startswith("/") and not is_topic_text_command:
             return await handler(event, data)
 
-        command, _ = parse_telegram_command(text)
-        if not self._should_apply_cooldown(command):
+        command = "topic_text"
+        if text.startswith("/"):
+            command, _ = parse_telegram_command(text)
+        if not is_topic_text_command and not self._should_apply_cooldown(command):
             return await handler(event, data)
 
         user_id = event.from_user.id if event.from_user else None
