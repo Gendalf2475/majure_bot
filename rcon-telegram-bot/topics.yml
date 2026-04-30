@@ -7,7 +7,7 @@ topics:
   test:
     display_name: "Тест"
     server: "test"
-    thread_id: 22
+    thread_id: 39
 
   polit:
     display_name: "Полит"
