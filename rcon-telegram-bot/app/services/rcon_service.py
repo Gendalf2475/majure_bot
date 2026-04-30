@@ -34,8 +34,11 @@ async def check_rcon_available(server: ServerConfig, timeout_seconds: float) -> 
 
 
 def sanitize_error(error: BaseException, server: ServerConfig) -> str:
-    # Перед логами и сообщениями пользователю удаляем пароль из текста ошибки.
+    # Перед логами и сообщениями пользователю удаляем приватные данные из текста ошибки.
     message = str(error) or error.__class__.__name__
+    if server.host:
+        message = message.replace(f"{server.host}:{server.port}", "***")
+        message = message.replace(server.host, "***")
     if server.password:
         message = message.replace(server.password, "***")
     return message
