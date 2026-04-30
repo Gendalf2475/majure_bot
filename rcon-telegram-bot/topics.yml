@@ -9,7 +9,7 @@ topics:
     server: "test"
     thread_id: 22
 
-  survival:
-    display_name: "Выживание"
-    server: "survival"
-    thread_id: 33
+  polit:
+    display_name: "Полит"
+    server: "polit"
+    thread_id: 37
