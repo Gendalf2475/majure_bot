@@ -43,12 +43,13 @@ def sanitize_error(error: BaseException, server: ServerConfig) -> str:
 
 def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_seconds: float) -> str:
     # Низкоуровневое выполнение Minecraft-команды через RCON.
+    timeout = max(1, int(timeout_seconds))
     try:
         with MCRcon(
             server.host,
             server.password,
             port=server.port,
-            timeout=timeout_seconds,
+            timeout=timeout,
         ) as rcon:
             response = rcon.command(command)
             return response or ""
@@ -62,12 +63,13 @@ def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_secon
 
 def _check_rcon_available_sync(server: ServerConfig, timeout_seconds: float) -> None:
     # Низкоуровневая проверка RCON-соединения без выполнения команды.
+    timeout = max(1, int(timeout_seconds))
     try:
         with MCRcon(
             server.host,
             server.password,
             port=server.port,
-            timeout=timeout_seconds,
+            timeout=timeout,
         ):
             return
     except (socket.timeout, TimeoutError) as error:
