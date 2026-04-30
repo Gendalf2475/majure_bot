@@ -62,7 +62,6 @@ def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_secon
             server.host,
             server.password,
             port=server.port,
-            timeout=timeout_seconds,
         ) as rcon:
             response = rcon.command(command)
             return response or ""
@@ -81,7 +80,6 @@ def _check_rcon_available_sync(server: ServerConfig, timeout_seconds: float) -> 
             server.host,
             server.password,
             port=server.port,
-            timeout=timeout_seconds,
         ):
             return
     except (socket.timeout, TimeoutError) as error:
