@@ -21,7 +21,7 @@ topic_commands_router = Router()
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
 NO_TOPIC_MESSAGE = "❌ RCON-команды работают только внутри топика, привязанного к серверу."
 UNKNOWN_TOPIC_MESSAGE = "❌ Этот топик не привязан к серверу в topics.yml."
-ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам из ADMIN_IDS."
+ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам."
 
 
 @topic_commands_router.message(Command("cmd"))
@@ -278,9 +278,9 @@ def _format_superadmin_access(
     topics_config: TopicsConfig,
 ) -> str:
     if target_user_id == _get_user_id(message):
-        prefix = "✅ Вы суперадмин из ADMIN_IDS."
+        prefix = "✅ Вы суперадмин"
     else:
-        prefix = f"✅ Пользователь {target_user_id} — суперадмин из ADMIN_IDS."
+        prefix = f"✅ Пользователь {target_user_id} — суперадмин."
 
     if not topics_config.topics:
         return f"{prefix}\nДоступны все режимы, но topics.yml пока пуст."
