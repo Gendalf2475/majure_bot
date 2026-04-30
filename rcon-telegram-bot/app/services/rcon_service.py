@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import socket
 
 from mcrcon import MCRcon, MCRconException
@@ -25,22 +24,13 @@ class RconTimeoutError(RconError):
 
 
 async def execute_rcon_command(server: ServerConfig, command: str, timeout_seconds: float) -> str:
-    # mcrcon работает синхронно, поэтому отправляем его в отдельный поток.
-    return await asyncio.to_thread(
-        _execute_rcon_command_sync,
-        server,
-        command,
-        timeout_seconds,
-    )
+    # mcrcon использует signal, поэтому выполняем его в основном потоке.
+    return _execute_rcon_command_sync(server, command, timeout_seconds)
 
 
 async def check_rcon_available(server: ServerConfig, timeout_seconds: float) -> None:
     # Для /status достаточно открыть RCON-соединение и сразу его закрыть.
-    await asyncio.to_thread(
-        _check_rcon_available_sync,
-        server,
-        timeout_seconds,
-    )
+    _check_rcon_available_sync(server, timeout_seconds)
 
 
 def sanitize_error(error: BaseException, server: ServerConfig) -> str:
@@ -58,6 +48,7 @@ def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_secon
             server.host,
             server.password,
             port=server.port,
+            timeout=timeout_seconds,
         ) as rcon:
             response = rcon.command(command)
             return response or ""
@@ -76,6 +67,7 @@ def _check_rcon_available_sync(server: ServerConfig, timeout_seconds: float) -> 
             server.host,
             server.password,
             port=server.port,
+            timeout=timeout_seconds,
         ):
             return
     except (socket.timeout, TimeoutError) as error:
