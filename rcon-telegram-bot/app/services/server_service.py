@@ -73,7 +73,7 @@ async def execute_server_command(
     settings: BotSettings,
 ) -> None:
     # В логи пишем только первое слово команды, чтобы не хранить полную историю действий.
-    command_root = minecraft_command.split(maxsplit=1)[0].lower()
+    command_root = _get_command_root(minecraft_command)
     try:
         # Отправляем Minecraft-команду в RCON конкретного Paper-сервера.
         response = await _execute_user_command_with_fallback(
@@ -177,7 +177,14 @@ def _truncate_response(response: str, max_length: int) -> str:
 
 
 def _is_list_command(minecraft_command: str) -> bool:
-    return minecraft_command.strip().split(maxsplit=1)[0].lower() == LIST_COMMAND
+    return _get_command_root(minecraft_command) == LIST_COMMAND
+
+
+def _get_command_root(minecraft_command: str) -> str:
+    command_parts = minecraft_command.strip().split(maxsplit=1)
+    if not command_parts:
+        return ""
+    return command_parts[0].lower()
 
 
 def _get_user_id_for_log(message: Message) -> int | None:

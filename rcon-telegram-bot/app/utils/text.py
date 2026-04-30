@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram.types import Message
 
 from app.config.servers import ServersConfig
+from app.config.topics import TopicsConfig
 
 
 MAX_TELEGRAM_CHUNK_SIZE = 3500
@@ -38,6 +39,15 @@ def build_server_command_lines(servers_config: ServersConfig) -> str:
     return "\n".join(
         f"/{server.telegram_command} <команда> — {server.display_name}"
         for server in servers_config.servers.values()
+    )
+
+
+def build_topic_lines(topics_config: TopicsConfig) -> str:
+    if not topics_config.topics:
+        return "нет настроенных топиков"
+    return "\n".join(
+        f"• {topic.display_name} — /cmd в топике, ключ доступа: {topic.key}"
+        for topic in topics_config.topics.values()
     )
 
 

@@ -9,6 +9,10 @@ SERVICE_COMMANDS = {
     "players",
     "chatid",
     "ping",
+    "cmd",
+    "grant",
+    "revoke",
+    "access",
 }
 
 

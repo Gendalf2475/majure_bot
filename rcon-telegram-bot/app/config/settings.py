@@ -15,6 +15,7 @@ class ConfigError(Exception):
 class BotSettings:
     telegram_bot_token: str
     allowed_chat_id: int
+    admin_ids: frozenset[int]
     command_cooldown_seconds: float
     rcon_timeout_seconds: float
     dry_run: bool
@@ -29,6 +30,7 @@ def load_settings(base_dir: Path | None = None) -> BotSettings:
     return BotSettings(
         telegram_bot_token=_get_required_env("TELEGRAM_BOT_TOKEN"),
         allowed_chat_id=_parse_required_int(_get_required_env("ALLOWED_CHAT_ID"), "ALLOWED_CHAT_ID"),
+        admin_ids=_parse_optional_int_set(os.getenv("ADMIN_IDS", ""), "ADMIN_IDS"),
         command_cooldown_seconds=_parse_positive_float(
             os.getenv("COMMAND_COOLDOWN_SECONDS", "2"),
             "COMMAND_COOLDOWN_SECONDS",
@@ -55,6 +57,20 @@ def _parse_required_int(value: str, name: str) -> int:
         return int(value)
     except ValueError as error:
         raise ConfigError(f"{name} должен быть целым числом.") from error
+
+
+def _parse_optional_int_set(value: str, name: str) -> frozenset[int]:
+    # ADMIN_IDS удобно хранить через запятую или пробел: "123,456" или "123 456".
+    if not value.strip():
+        return frozenset()
+
+    parsed: set[int] = set()
+    for raw_item in value.replace(",", " ").split():
+        try:
+            parsed.add(int(raw_item))
+        except ValueError as error:
+            raise ConfigError(f"{name} должен содержать только целые Telegram user_id.") from error
+    return frozenset(parsed)
 
 
 def _parse_positive_float(value: str, name: str) -> float:

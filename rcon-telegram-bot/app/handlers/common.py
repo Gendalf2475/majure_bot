@@ -8,11 +8,13 @@ from aiogram.types import Message
 
 from app.config.servers import ServersConfig
 from app.config.settings import BotSettings
+from app.config.topics import TopicsConfig
 from app.services.server_service import get_server_players_block, get_server_status_line
 from app.utils.text import (
     build_allowed_commands_text,
     build_server_command_lines,
     build_server_lines,
+    build_topic_lines,
     send_long_message,
 )
 
@@ -21,20 +23,30 @@ common_router = Router()
 
 
 @common_router.message(Command("start"))
-async def handle_start(message: Message, servers_config: ServersConfig) -> None:
+async def handle_start(
+    message: Message,
+    servers_config: ServersConfig,
+    topics_config: TopicsConfig,
+) -> None:
     # Короткое приветствие и пример формата серверной команды.
     text = (
         "👋 Это RCON-бот для управления Minecraft Paper-серверами.\n\n"
         "Доступные серверы:\n"
         f"{build_server_lines(servers_config)}\n\n"
+        "Топики:\n"
+        f"{build_topic_lines(topics_config)}\n\n"
         "Пример использования:\n"
-        "/test list"
+        "/cmd list"
     )
     await message.answer(text)
 
 
 @common_router.message(Command("help"))
-async def handle_help(message: Message, servers_config: ServersConfig) -> None:
+async def handle_help(
+    message: Message,
+    servers_config: ServersConfig,
+    topics_config: TopicsConfig,
+) -> None:
     # Подробная справка: служебные команды, серверные команды и whitelist Minecraft-команд.
     text = (
         "📌 Команды бота:\n\n"
@@ -43,13 +55,19 @@ async def handle_help(message: Message, servers_config: ServersConfig) -> None:
         "/servers — список серверов\n"
         "/status — проверить доступность RCON-серверов\n"
         "/players — онлайн игроков на всех серверах\n"
+        "/cmd <команда> — выполнить RCON-команду в текущем топике\n"
+        "/grant <user_id> <topic_key> — выдать доступ к режиму\n"
+        "/revoke <user_id> <topic_key> — отозвать доступ к режиму\n"
+        "/access — показать выданные режимы\n"
         "/chatid — показать ID текущей беседы\n"
         "/ping — проверить работу бота\n\n"
+        "🧵 Топики:\n"
+        f"{build_topic_lines(topics_config)}\n\n"
         "🎮 Команды серверов:\n"
         f"{build_server_command_lines(servers_config)}\n\n"
         "Примеры:\n"
-        "/test list\n"
-        "/test say Проверка\n"
+        "/cmd list\n"
+        "/cmd say Проверка\n"
         "/lobby whitelist add Gendalf2475\n"
         "/polit kick PlayerName Причина\n\n"
         "✅ Разрешённые Minecraft-команды:\n"

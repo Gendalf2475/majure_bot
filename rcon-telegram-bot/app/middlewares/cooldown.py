@@ -55,5 +55,5 @@ class CommandCooldownMiddleware(BaseMiddleware):
         return await handler(event, data)
 
     def _should_apply_cooldown(self, command: str) -> bool:
-        # Cooldown применяем к /status, /players и серверным командам вроде /test.
-        return command in {"status", "players"} or command in self.servers_config.servers_by_command
+        # Cooldown применяем к RCON-командам и статусным проверкам.
+        return command in {"status", "players", "cmd"} or command in self.servers_config.servers_by_command
