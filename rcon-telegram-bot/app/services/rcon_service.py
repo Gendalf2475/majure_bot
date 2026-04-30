@@ -26,25 +26,21 @@ class RconTimeoutError(RconError):
 
 async def execute_rcon_command(server: ServerConfig, command: str, timeout_seconds: float) -> str:
     # mcrcon работает синхронно, поэтому отправляем его в отдельный поток.
-    # asyncio.wait_for ограничивает время ожидания ответа от сервера.
-    try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(_execute_rcon_command_sync, server, command, timeout_seconds),
-            timeout=timeout_seconds,
-        )
-    except asyncio.TimeoutError as error:
-        raise RconTimeoutError from error
+    return await asyncio.to_thread(
+        _execute_rcon_command_sync,
+        server,
+        command,
+        timeout_seconds,
+    )
 
 
 async def check_rcon_available(server: ServerConfig, timeout_seconds: float) -> None:
     # Для /status достаточно открыть RCON-соединение и сразу его закрыть.
-    try:
-        await asyncio.wait_for(
-            asyncio.to_thread(_check_rcon_available_sync, server, timeout_seconds),
-            timeout=timeout_seconds,
-        )
-    except asyncio.TimeoutError as error:
-        raise RconTimeoutError from error
+    await asyncio.to_thread(
+        _check_rcon_available_sync,
+        server,
+        timeout_seconds,
+    )
 
 
 def sanitize_error(error: BaseException, server: ServerConfig) -> str:
