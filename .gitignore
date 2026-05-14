@@ -1,0 +1,16 @@
+.env
+.env.*
+*.env
+
+rcon-telegram-bot/servers.yml
+rcon-telegram-bot/topics.yml
+rcon-telegram-bot/topic_access.yml
+
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+.DS_Store
+__pycache__/
+*.py[cod]
