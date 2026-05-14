@@ -26,7 +26,7 @@ class ParsedAliasCommand:
     alias: CommandAlias
     input: str
     args: str
-    rcon_command: str
+    rcon_commands: tuple[str, ...]
     show_response: bool
     success_message: str | None
 
@@ -56,21 +56,31 @@ def parse_alias_command(
     if alias is None:
         return None
 
-    rcon_command = _build_rcon_command(alias, args)
-    if not rcon_command:
+    rcon_commands = _build_rcon_commands(alias, args)
+    if not rcon_commands:
         return None
 
     return ParsedAliasCommand(
         alias=alias,
         input=alias.input,
         args=args,
-        rcon_command=rcon_command,
+        rcon_commands=rcon_commands,
         show_response=alias.show_response,
         success_message=alias.success_message,
     )
 
 
-def _build_rcon_command(alias: CommandAlias, args: str) -> str:
-    if "{args}" not in alias.execute:
-        return alias.execute.strip()
-    return alias.execute.replace("{args}", args).strip()
+def _build_rcon_commands(alias: CommandAlias, args: str) -> tuple[str, ...]:
+    templates = alias.execute if isinstance(alias.execute, list) else [alias.execute]
+    commands: list[str] = []
+    for template in templates:
+        command = _build_rcon_command(template, args)
+        if command:
+            commands.append(command)
+    return tuple(commands)
+
+
+def _build_rcon_command(template: str, args: str) -> str:
+    if "{args}" not in template:
+        return template.strip()
+    return template.replace("{args}", args).strip()

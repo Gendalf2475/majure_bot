@@ -9,6 +9,11 @@ import yaml
 from app.config.settings import ConfigError
 
 
+ALIAS_ACCESS_ADMIN = "admin"
+ALIAS_ACCESS_SUPERADMIN = "superadmin"
+ALIAS_ACCESS_LEVELS = frozenset({ALIAS_ACCESS_ADMIN, ALIAS_ACCESS_SUPERADMIN})
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     key: str
@@ -23,9 +28,12 @@ class ServerConfig:
 class CommandAlias:
     key: str
     input: str
-    execute: str
+    execute: str | list[str]
     show_response: bool
-    success_message: str | None = None
+    success_message: str | None
+    enabled: bool
+    access: str
+    description: str
 
 
 @dataclass(frozen=True)
@@ -164,13 +172,15 @@ def _parse_command_aliases(
             raise ConfigError(f"Алиас команды {key} должен быть YAML-словарем.")
 
         input_command = _normalize_alias_input(alias_data.get("input"), key)
-        execute = _get_required_alias_string(alias_data, "execute", key)
-        _validate_alias_execute(execute, key)
+        execute = _parse_alias_execute(alias_data.get("execute"), key)
         show_response = _parse_alias_show_response(
             alias_data.get("show_response", True),
             key,
         )
         success_message = _parse_alias_success_message(alias_data.get("success_message"), key)
+        enabled = _parse_alias_enabled(alias_data.get("enabled", True), key)
+        access = _parse_alias_access(alias_data.get("access", ALIAS_ACCESS_ADMIN), key)
+        description = _parse_alias_description(alias_data.get("description"), key)
 
         alias = CommandAlias(
             key=key,
@@ -178,6 +188,9 @@ def _parse_command_aliases(
             execute=execute,
             show_response=show_response,
             success_message=success_message,
+            enabled=enabled,
+            access=access,
+            description=description,
         )
 
         if input_command in command_aliases_by_input:
@@ -201,6 +214,35 @@ def _get_required_alias_string(data: dict[str, Any], field_name: str, alias_key:
     return str(value).strip()
 
 
+def _parse_alias_execute(value: Any, alias_key: str) -> str | list[str]:
+    if isinstance(value, str):
+        execute = value.strip()
+        if not execute:
+            raise ConfigError(f"У алиаса команды {alias_key} не заполнено поле execute.")
+        _validate_alias_execute_template(execute, alias_key)
+        return execute
+
+    if isinstance(value, list):
+        if not value:
+            raise ConfigError(f"execute алиаса команды {alias_key} не должен быть пустым списком.")
+
+        commands: list[str] = []
+        for index, raw_command in enumerate(value, start=1):
+            if not isinstance(raw_command, str) or not raw_command.strip():
+                raise ConfigError(
+                    f"Элемент {index} в execute алиаса команды {alias_key} "
+                    "должен быть непустой строкой."
+                )
+            command = raw_command.strip()
+            _validate_alias_execute_template(command, alias_key)
+            commands.append(command)
+        return commands
+
+    raise ConfigError(
+        f"execute алиаса команды {alias_key} должен быть строкой или списком строк."
+    )
+
+
 def _normalize_alias_input(value: Any, alias_key: str) -> str:
     input_command = _get_required_alias_string(
         {"input": value},
@@ -214,7 +256,7 @@ def _normalize_alias_input(value: Any, alias_key: str) -> str:
     return input_command
 
 
-def _validate_alias_execute(execute: str, alias_key: str) -> None:
+def _validate_alias_execute_template(execute: str, alias_key: str) -> None:
     if not execute.replace("{args}", "").strip():
         raise ConfigError(
             f"execute алиаса команды {alias_key} не должен состоять только из {{args}}."
@@ -227,6 +269,24 @@ def _parse_alias_show_response(value: Any, alias_key: str) -> bool:
     return value
 
 
+def _parse_alias_enabled(value: Any, alias_key: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"enabled алиаса команды {alias_key} должен быть bool.")
+    return value
+
+
+def _parse_alias_access(value: Any, alias_key: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"access алиаса команды {alias_key} должен быть строкой.")
+
+    access = value.strip().lower()
+    if access not in ALIAS_ACCESS_LEVELS:
+        raise ConfigError(
+            f"access алиаса команды {alias_key} должен быть admin или superadmin."
+        )
+    return access
+
+
 def _parse_alias_success_message(value: Any, alias_key: str) -> str | None:
     if value is None:
         return None
@@ -237,3 +297,11 @@ def _parse_alias_success_message(value: Any, alias_key: str) -> str | None:
     if not success_message:
         return None
     return success_message
+
+
+def _parse_alias_description(value: Any, alias_key: str) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ConfigError(f"description алиаса команды {alias_key} должен быть строкой.")
+    return value.strip()

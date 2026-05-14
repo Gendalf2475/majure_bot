@@ -69,18 +69,19 @@ async def get_server_players_block(server: ServerConfig, settings: BotSettings) 
 async def execute_server_command(
     message: Message,
     server: ServerConfig,
-    minecraft_command: str,
+    minecraft_commands: str | tuple[str, ...] | list[str],
     settings: BotSettings,
     show_response: bool,
     success_message: str | None = None,
 ) -> None:
     # В логи пишем только первое слово команды, чтобы не хранить полную историю действий.
-    command_root = _get_command_root(minecraft_command)
+    commands = _normalize_command_list(minecraft_commands)
+    command_root = _get_commands_root_for_log(commands)
     try:
         # Отправляем Minecraft-команду в RCON конкретного Paper-сервера.
-        response = await _execute_user_command_with_fallback(
+        response = await _execute_user_commands_with_fallback(
             server,
-            minecraft_command,
+            commands,
             settings.rcon_timeout_seconds,
         )
     except RconTimeoutError:
@@ -130,7 +131,7 @@ async def execute_server_command(
 
     response_text = response.strip()
     if not response_text:
-        if _is_list_command(minecraft_command):
+        if len(commands) == 1 and _is_list_command(commands[0]):
             await message.answer(
                 f"✅ Команда list выполнена на {server.display_name}, "
                 "но сервер не вернул список игроков."
@@ -162,6 +163,23 @@ async def _execute_user_command_with_fallback(
     return response
 
 
+async def _execute_user_commands_with_fallback(
+    server: ServerConfig,
+    minecraft_commands: tuple[str, ...],
+    timeout_seconds: float,
+) -> str:
+    responses: list[str] = []
+    for minecraft_command in minecraft_commands:
+        response = await _execute_user_command_with_fallback(
+            server,
+            minecraft_command,
+            timeout_seconds,
+        )
+        if response.strip():
+            responses.append(response.strip())
+    return "\n\n".join(responses)
+
+
 async def _execute_list_command_with_fallback(server: ServerConfig, timeout_seconds: float) -> str:
     response = await execute_rcon_command(server, LIST_COMMAND, timeout_seconds)
     if response.strip():
@@ -184,6 +202,17 @@ def _truncate_response(response: str, max_length: int) -> str:
 
 def _is_list_command(minecraft_command: str) -> bool:
     return _get_command_root(minecraft_command) == LIST_COMMAND
+
+
+def _normalize_command_list(minecraft_commands: str | tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    if isinstance(minecraft_commands, str):
+        return (minecraft_commands,)
+    return tuple(command for command in minecraft_commands if command.strip())
+
+
+def _get_commands_root_for_log(minecraft_commands: tuple[str, ...]) -> str:
+    command_roots = [_get_command_root(command) for command in minecraft_commands]
+    return ",".join(command_root for command_root in command_roots if command_root)
 
 
 def _get_command_root(minecraft_command: str) -> str:

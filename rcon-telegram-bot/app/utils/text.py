@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from aiogram.types import Message
 
-from app.config.servers import ServersConfig
+from app.config.servers import ALIAS_ACCESS_ADMIN, ALIAS_ACCESS_SUPERADMIN, ServersConfig
 from app.config.topics import TopicsConfig
 
 
@@ -51,14 +51,35 @@ def build_topic_lines(topics_config: TopicsConfig) -> str:
     )
 
 
-def build_command_aliases_text(servers_config: ServersConfig) -> str:
-    if not servers_config.command_aliases:
+def build_command_aliases_text(
+    servers_config: ServersConfig,
+    *,
+    include_admin: bool,
+    include_superadmin: bool,
+) -> str:
+    visible_aliases = [
+        alias
+        for alias in servers_config.command_aliases.values()
+        if alias.enabled
+        and (
+            (include_admin and alias.access == ALIAS_ACCESS_ADMIN)
+            or (include_superadmin and alias.access == ALIAS_ACCESS_SUPERADMIN)
+        )
+    ]
+
+    if not visible_aliases:
         return "нет"
 
     return "\n".join(
-        f"• {alias.input} → {alias.execute}"
+        _format_alias_help_line(alias.input, alias.description)
         for alias in sorted(
-            servers_config.command_aliases.values(),
+            visible_aliases,
             key=lambda command_alias: command_alias.input,
         )
     )
+
+
+def _format_alias_help_line(input_command: str, description: str) -> str:
+    if description:
+        return f"• {input_command} — {description}"
+    return f"• {input_command}"

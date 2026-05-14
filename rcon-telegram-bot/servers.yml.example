@@ -15,27 +15,53 @@ servers:
 
 command_aliases:
   ban:
-    input: "123"
+    input: "ban"
     execute: "ban {args}"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Забанить игрока"
 
   mute:
     input: "mute"
     execute: "tempmute {args}"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Выдать временный мут"
 
   list:
     input: "list"
     execute: "list"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Список игроков на сервере"
 
   say:
     input: "say"
     execute: "say {args}"
     show_response: false
+    enabled: true
+    access: "admin"
+    description: "Отправить сообщение в чат сервера"
+
+  clearmoder:
+    input: "clearmoder"
+    execute:
+      - "lp user {args} parent remove moderator"
+      - "lp user {args} permission clear"
+    show_response: false
+    success_message: "✅ Права модератора сняты."
+    enabled: false
+    access: "superadmin"
+    description: "Снять права модератора"
 
   srestart:
     input: "srestart"
     execute: "uar now 300"
     show_response: false
     success_message: "✅ Рестарт сервера запущен."
+    enabled: true
+    access: "superadmin"
+    description: "Запустить рестарт сервера"

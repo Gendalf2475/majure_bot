@@ -185,30 +185,56 @@ servers:
 
 command_aliases:
   ban:
-    input: "123"
+    input: "ban"
     execute: "ban {args}"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Забанить игрока"
 
   mute:
     input: "mute"
     execute: "tempmute {args}"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Выдать временный мут"
 
   list:
     input: "list"
     execute: "list"
     show_response: true
+    enabled: true
+    access: "admin"
+    description: "Список игроков на сервере"
 
   say:
     input: "say"
     execute: "say {args}"
     show_response: false
+    enabled: true
+    access: "admin"
+    description: "Отправить сообщение в чат сервера"
+
+  clearmoder:
+    input: "clearmoder"
+    execute:
+      - "lp user {args} parent remove moderator"
+      - "lp user {args} permission clear"
+    show_response: false
+    success_message: "✅ Права модератора сняты."
+    enabled: false
+    access: "superadmin"
+    description: "Снять права модератора"
 
   srestart:
     input: "srestart"
     execute: "uar now 300"
     show_response: false
     success_message: "✅ Рестарт сервера запущен."
+    enabled: true
+    access: "superadmin"
+    description: "Запустить рестарт сервера"
 ```
 
 `command_aliases` — это безопасная карта команд. Пользователь пишет `input` в Telegram, бот берёт всё после `input` как `{args}` и отправляет в RCON только команду, собранную из `execute`.
@@ -217,12 +243,26 @@ command_aliases:
 
 - `input` — что пишет человек в Telegram. Значение приводится к lowercase, не должно начинаться с `/` и не должно содержать пробелы.
 - `execute` — RCON-шаблон из конфига. Если в нём есть `{args}`, туда подставляется текст после `input`. Шаблон не должен состоять только из `{args}`.
+- `execute` может быть строкой или списком строк. Если указан список, бот выполнит команды по порядку.
 - `show_response` — показывать ли реальный ответ RCON-сервера. По умолчанию `true`.
 - `success_message` — необязательный текст успешного выполнения для `show_response: false`. Если он пустой или не указан, бот отправит стандартное `✅ Команда выполнена на <server.display_name>.`
+- `enabled` — включает или отключает алиас. По умолчанию `true`. Отключённые алиасы не видны в `/help` и не выполняются.
+- `access` — `admin` для пользователей с доступом к режиму и суперадминов, `superadmin` только для `ADMIN_IDS`. По умолчанию `admin`.
+- `description` — текст для `/help`. Если пустой, в `/help` показывается только `input`.
+
+В `/help` бот показывает только `input` и `description`, без RCON-шаблонов:
+
+```text
+✅ Доступные алиасы команд:
+• ban — Забанить игрока
+• list — Список игроков на сервере
+```
+
+Обычный пользователь с доступом к режиму видит только включённые алиасы `access: admin`. Суперадмин видит включённые алиасы `access: admin` и `access: superadmin`.
 
 Примеры сборки:
 
-- Пользователь пишет `123 Gendalf2475 7d Читы`, `execute: "ban {args}"` превращается в `ban Gendalf2475 7d Читы`.
+- Пользователь пишет `ban Gendalf2475 7d Читы`, `execute: "ban {args}"` превращается в `ban Gendalf2475 7d Читы`.
 - Пользователь пишет `srestart test test`, `execute: "uar now 300"` не содержит `{args}`, поэтому в RCON уходит только `uar now 300`.
 
 Держите набор алиасов минимальным. Бот не отправляет пользовательский текст в RCON напрямую: команда всегда собирается из `execute`.
@@ -323,11 +363,11 @@ python bot.py
 ```text
 list
 say Привет
-123 Gendalf2475 7d Читы
+ban Gendalf2475 7d Читы
 srestart test test
 /test list
 /polit list
-/polit 123 Gendalf2475 7d Читы
+/polit ban Gendalf2475 7d Читы
 /status
 /players
 /ping
@@ -357,7 +397,7 @@ list
 /<telegram_command> <alias_input> [аргументы]
 ```
 
-Например, `/polit 123 Gendalf2475 7d Читы` отправит в RCON сервера `polit` команду `ban Gendalf2475 7d Читы`, если такой алиас настроен. Если сервер привязан к топику, доступ к режиму всё равно проверяется.
+Например, `/polit ban Gendalf2475 7d Читы` отправит в RCON сервера `polit` команду `ban Gendalf2475 7d Читы`, если такой алиас настроен. Если сервер привязан к топику, доступ к режиму всё равно проверяется.
 
 ## 12. Частые ошибки
 
@@ -366,6 +406,8 @@ list
 - Порт RCON занят другим процессом.
 - Firewall или правила хостинга блокируют порт.
 - Алиас команды не добавлен в `command_aliases`.
+- Алиас отключён через `enabled: false`.
+- Для алиаса указан `access: superadmin`, а пользователя нет в `ADMIN_IDS`.
 - `ALLOWED_CHAT_ID` не настроен или указан неверно.
 - `ADMIN_IDS` не содержит user_id суперадмина.
 - Топик не добавлен в `topics.yml` или указан неверный `thread_id`.

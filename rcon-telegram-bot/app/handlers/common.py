@@ -10,6 +10,7 @@ from app.config.servers import ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicsConfig
 from app.services.server_service import get_server_players_block, get_server_status_line
+from app.services.topic_access_service import TopicAccessStore, is_admin_user
 from app.utils.text import (
     build_command_aliases_text,
     build_server_command_lines,
@@ -44,10 +45,22 @@ async def handle_start(
 @common_router.message(Command("help"))
 async def handle_help(
     message: Message,
+    settings: BotSettings,
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
+    topic_access_store: TopicAccessStore,
 ) -> None:
     # Подробная справка: служебные команды, серверные команды и доступные алиасы.
+    include_superadmin_aliases = is_admin_user(_get_user_id(message), settings)
+    include_admin_aliases = include_superadmin_aliases or _has_any_topic_access(
+        message,
+        topic_access_store,
+    )
+    command_aliases_text = build_command_aliases_text(
+        servers_config,
+        include_admin=include_admin_aliases,
+        include_superadmin=include_superadmin_aliases,
+    )
     text = (
         "📌 Команды бота:\n\n"
         "/start — информация о боте\n"
@@ -70,7 +83,7 @@ async def handle_help(
         "say Проверка\n"
         "/polit list\n\n"
         "✅ Доступные алиасы команд:\n"
-        f"{build_command_aliases_text(servers_config)}"
+        f"{command_aliases_text}"
     )
     await message.answer(text)
 
@@ -125,3 +138,14 @@ async def handle_players(
         )
     )
     await send_long_message(message, "👥 Онлайн игроков:\n\n" + "\n\n".join(results))
+
+
+def _get_user_id(message: Message) -> int | None:
+    return message.from_user.id if message.from_user else None
+
+
+def _has_any_topic_access(message: Message, topic_access_store: TopicAccessStore) -> bool:
+    user_id = _get_user_id(message)
+    if user_id is None:
+        return False
+    return bool(topic_access_store.get_user_topics(user_id))

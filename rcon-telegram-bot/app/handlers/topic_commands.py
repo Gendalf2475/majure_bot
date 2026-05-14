@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from app.config.servers import ServersConfig
+from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
 from app.services.server_service import execute_server_command
@@ -13,12 +13,14 @@ from app.services.topic_access_service import (
     can_use_topic,
     is_admin_user,
 )
-from app.utils.validation import parse_alias_command, parse_telegram_command
+from app.utils.validation import ParsedAliasCommand, parse_alias_command, parse_telegram_command
 
 
 topic_commands_router = Router()
 
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
+DISABLED_COMMAND_MESSAGE = "❌ Эта команда временно отключена."
+COMMAND_ACCESS_DENIED_MESSAGE = "⛔ У вас нет доступа к этой команде."
 NO_TOPIC_MESSAGE = "❌ RCON-команды работают только внутри топика, привязанного к серверу."
 UNKNOWN_TOPIC_MESSAGE = "❌ Этот топик не привязан к серверу в topics.yml."
 ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам."
@@ -81,17 +83,27 @@ async def _execute_topic_alias_command(
     if topic is None:
         return
 
-    user_id = _get_user_id(message)
-    if not can_use_topic(user_id, topic.key, settings, topic_access_store):
-        await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
-        return
-
     parsed_command = parse_alias_command(
         command_text,
         servers_config.command_aliases_by_input,
     )
     if parsed_command is None:
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
+        return
+
+    user_id = _get_user_id(message)
+    if not parsed_command.alias.enabled:
+        await message.answer(DISABLED_COMMAND_MESSAGE)
+        return
+
+    if not _can_execute_alias_command(
+        parsed_command,
+        user_id,
+        topic,
+        settings,
+        topic_access_store,
+    ):
+        await message.answer(COMMAND_ACCESS_DENIED_MESSAGE)
         return
 
     server = servers_config.servers[topic.server_key]
@@ -101,7 +113,7 @@ async def _execute_topic_alias_command(
             f"Топик: {topic.display_name}\n"
             f"Сервер: {server.display_name}\n"
             f"Input alias: {parsed_command.input}\n"
-            f"RCON-команда: {parsed_command.rcon_command}\n"
+            f"{_format_dry_run_commands(parsed_command.rcon_commands)}\n"
             f"show_response: {str(parsed_command.show_response).lower()}"
         )
         return
@@ -109,11 +121,29 @@ async def _execute_topic_alias_command(
     await execute_server_command(
         message,
         server,
-        parsed_command.rcon_command,
+        parsed_command.rcon_commands,
         settings,
         show_response=parsed_command.show_response,
         success_message=parsed_command.success_message,
     )
+
+
+def _can_execute_alias_command(
+    parsed_command: ParsedAliasCommand,
+    user_id: int | None,
+    topic: TopicConfig,
+    settings: BotSettings,
+    topic_access_store: TopicAccessStore,
+) -> bool:
+    if parsed_command.alias.access == ALIAS_ACCESS_SUPERADMIN:
+        return is_admin_user(user_id, settings)
+    return can_use_topic(user_id, topic.key, settings, topic_access_store)
+
+
+def _format_dry_run_commands(rcon_commands: tuple[str, ...]) -> str:
+    if len(rcon_commands) == 1:
+        return f"RCON-команда: {rcon_commands[0]}"
+    return "RCON-команды:\n" + "\n".join(f"• {command}" for command in rcon_commands)
 
 
 @topic_commands_router.message(Command("grant"))
