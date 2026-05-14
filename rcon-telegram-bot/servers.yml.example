@@ -13,6 +13,29 @@ servers:
     password: "CHANGE_ME"
     telegram_command: "polit"
 
-allowed_commands:
-  - "list"
-  - "say"
+command_aliases:
+  ban:
+    input: "123"
+    execute: "ban {args}"
+    show_response: true
+
+  mute:
+    input: "mute"
+    execute: "tempmute {args}"
+    show_response: true
+
+  list:
+    input: "list"
+    execute: "list"
+    show_response: true
+
+  say:
+    input: "say"
+    execute: "say {args}"
+    show_response: false
+
+  srestart:
+    input: "srestart"
+    execute: "uar now 300"
+    show_response: false
+    success_message: "✅ Рестарт сервера запущен."

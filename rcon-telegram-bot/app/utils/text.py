@@ -37,7 +37,7 @@ def build_server_lines(servers_config: ServersConfig) -> str:
 def build_server_command_lines(servers_config: ServersConfig) -> str:
     # Формат списка серверных команд для /help.
     return "\n".join(
-        f"/{server.telegram_command} <команда> — {server.display_name}"
+        f"/{server.telegram_command} <alias> [аргументы] — {server.display_name}"
         for server in servers_config.servers.values()
     )
 
@@ -46,13 +46,19 @@ def build_topic_lines(topics_config: TopicsConfig) -> str:
     if not topics_config.topics:
         return "нет настроенных топиков"
     return "\n".join(
-        f"• {topic.display_name} — пишите RCON-команды в топике, ключ доступа: {topic.key}"
+        f"• {topic.display_name} — пишите алиасы команд в топике, ключ доступа: {topic.key}"
         for topic in topics_config.topics.values()
     )
 
 
-def build_allowed_commands_text(servers_config: ServersConfig) -> str:
-    # Если whitelist пустой, так и пишем: пользовательские команды будут запрещены.
-    if not servers_config.allowed_commands:
+def build_command_aliases_text(servers_config: ServersConfig) -> str:
+    if not servers_config.command_aliases:
         return "нет"
-    return ", ".join(sorted(servers_config.allowed_commands))
+
+    return "\n".join(
+        f"• {alias.input} → {alias.execute}"
+        for alias in sorted(
+            servers_config.command_aliases.values(),
+            key=lambda command_alias: command_alias.input,
+        )
+    )

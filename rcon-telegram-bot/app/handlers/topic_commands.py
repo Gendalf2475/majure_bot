@@ -13,7 +13,7 @@ from app.services.topic_access_service import (
     can_use_topic,
     is_admin_user,
 )
-from app.utils.validation import is_minecraft_command_allowed, parse_telegram_command
+from app.utils.validation import parse_alias_command, parse_telegram_command
 
 
 topic_commands_router = Router()
@@ -34,10 +34,10 @@ async def handle_topic_command(
 ) -> None:
     _, minecraft_command = parse_telegram_command(message.text or "")
     if not minecraft_command:
-        await message.answer("❌ Укажите команду Minecraft.\nПример: напишите list в нужном топике")
+        await message.answer("❌ Укажите алиас команды.\nПример: напишите list в нужном топике")
         return
 
-    await _execute_topic_minecraft_command(
+    await _execute_topic_alias_command(
         message,
         minecraft_command,
         settings,
@@ -55,13 +55,13 @@ async def handle_topic_text_command(
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
 ) -> None:
-    minecraft_command = (message.text or "").strip()
-    if not minecraft_command:
+    command_text = (message.text or "").strip()
+    if not command_text:
         return
 
-    await _execute_topic_minecraft_command(
+    await _execute_topic_alias_command(
         message,
-        minecraft_command,
+        command_text,
         settings,
         servers_config,
         topics_config,
@@ -69,9 +69,9 @@ async def handle_topic_text_command(
     )
 
 
-async def _execute_topic_minecraft_command(
+async def _execute_topic_alias_command(
     message: Message,
-    minecraft_command: str,
+    command_text: str,
     settings: BotSettings,
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
@@ -86,7 +86,11 @@ async def _execute_topic_minecraft_command(
         await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
         return
 
-    if not is_minecraft_command_allowed(minecraft_command, servers_config.allowed_commands):
+    parsed_command = parse_alias_command(
+        command_text,
+        servers_config.command_aliases_by_input,
+    )
+    if parsed_command is None:
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
         return
 
@@ -96,11 +100,20 @@ async def _execute_topic_minecraft_command(
             "🧪 DRY RUN:\n"
             f"Топик: {topic.display_name}\n"
             f"Сервер: {server.display_name}\n"
-            f"Команда: {minecraft_command}"
+            f"Input alias: {parsed_command.input}\n"
+            f"RCON-команда: {parsed_command.rcon_command}\n"
+            f"show_response: {str(parsed_command.show_response).lower()}"
         )
         return
 
-    await execute_server_command(message, server, minecraft_command, settings)
+    await execute_server_command(
+        message,
+        server,
+        parsed_command.rcon_command,
+        settings,
+        show_response=parsed_command.show_response,
+        success_message=parsed_command.success_message,
+    )
 
 
 @topic_commands_router.message(Command("grant"))

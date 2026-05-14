@@ -10,7 +10,7 @@ from app.services.server_service import execute_server_command, get_server_by_co
 from app.services.topic_access_service import TopicAccessStore, can_use_topic
 from app.utils.validation import (
     SERVICE_COMMANDS,
-    is_minecraft_command_allowed,
+    parse_alias_command,
     parse_telegram_command,
 )
 
@@ -28,8 +28,8 @@ async def handle_server_command(
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
 ) -> None:
-    # Разбираем Telegram-команду: из "/test list" получаем command="test", minecraft_command="list".
-    command, minecraft_command = parse_telegram_command(message.text or "")
+    # Разбираем Telegram-команду: из "/test list" получаем command="test", arguments="list".
+    command, arguments = parse_telegram_command(message.text or "")
 
     # Служебные команды уже обработаны в common.py.
     if command in SERVICE_COMMANDS:
@@ -41,15 +41,18 @@ async def handle_server_command(
         await message.answer("❌ Сервер не найден.")
         return
 
-    if not minecraft_command:
+    if not arguments:
         await message.answer(
-            "❌ Укажите команду Minecraft.\n"
+            "❌ Укажите алиас команды.\n"
             f"Пример: /{server.telegram_command} list"
         )
         return
 
-    # Проверяем whitelist из allowed_commands: берётся только первое слово Minecraft-команды.
-    if not is_minecraft_command_allowed(minecraft_command, servers_config.allowed_commands):
+    parsed_command = parse_alias_command(
+        arguments,
+        servers_config.command_aliases_by_input,
+    )
+    if parsed_command is None:
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
         return
 
@@ -64,8 +67,17 @@ async def handle_server_command(
         await message.answer(
             "🧪 DRY RUN:\n"
             f"Сервер: {server.display_name}\n"
-            f"Команда: {minecraft_command}"
+            f"Input alias: {parsed_command.input}\n"
+            f"RCON-команда: {parsed_command.rcon_command}\n"
+            f"show_response: {str(parsed_command.show_response).lower()}"
         )
         return
 
-    await execute_server_command(message, server, minecraft_command, settings)
+    await execute_server_command(
+        message,
+        server,
+        parsed_command.rcon_command,
+        settings,
+        show_response=parsed_command.show_response,
+        success_message=parsed_command.success_message,
+    )

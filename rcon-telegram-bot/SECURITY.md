@@ -38,7 +38,7 @@ Minecraft RCON should be treated as an administrative interface.
 - Do not expose RCON ports to the public internet unless access is strictly firewalled.
 - Prefer localhost, VPN, private network, or host firewall rules.
 - Use unique strong RCON passwords for every server.
-- Keep `allowed_commands` as small as possible.
+- Keep `command_aliases` as small and explicit as possible.
 - Avoid allowing high-impact commands such as `op`, `deop`, `stop`, `reload`, permission-management commands, or arbitrary plugin console commands unless every chat member is trusted.
 - Test new configuration with `DRY_RUN=true` before enabling real command execution.
 

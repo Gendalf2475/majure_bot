@@ -71,6 +71,8 @@ async def execute_server_command(
     server: ServerConfig,
     minecraft_command: str,
     settings: BotSettings,
+    show_response: bool,
+    success_message: str | None = None,
 ) -> None:
     # В логи пишем только первое слово команды, чтобы не хранить полную историю действий.
     command_root = _get_command_root(minecraft_command)
@@ -121,6 +123,10 @@ async def execute_server_command(
         _get_user_id_for_log(message),
         command_root,
     )
+
+    if not show_response:
+        await message.answer(success_message or f"✅ Команда выполнена на {server.display_name}.")
+        return
 
     response_text = response.strip()
     if not response_text:

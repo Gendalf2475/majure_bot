@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+from app.config.servers import CommandAlias
+
 
 SERVICE_COMMANDS = {
     "start",
@@ -16,6 +21,16 @@ SERVICE_COMMANDS = {
 }
 
 
+@dataclass(frozen=True)
+class ParsedAliasCommand:
+    alias: CommandAlias
+    input: str
+    args: str
+    rcon_command: str
+    show_response: bool
+    success_message: str | None
+
+
 def parse_telegram_command(text: str) -> tuple[str, str]:
     # Разбираем "/test list" на command="test" и arguments="list".
     # Если Telegram добавит username бота: "/test@MyBot list", username будет отрезан.
@@ -25,14 +40,37 @@ def parse_telegram_command(text: str) -> tuple[str, str]:
     return command, arguments.strip()
 
 
-def is_minecraft_command_allowed(minecraft_command: str, allowed_commands: frozenset[str]) -> bool:
-    # Пустой whitelist означает, что пользовательские Minecraft-команды запрещены.
-    if not allowed_commands:
-        return False
+def parse_alias_command(
+    text: str,
+    command_aliases_by_input: Mapping[str, CommandAlias],
+) -> ParsedAliasCommand | None:
+    stripped = text.strip()
+    if not stripped:
+        return None
 
-    # Проверяем только первое слово: "lp user ..." разрешается по "lp".
-    command_root = minecraft_command.strip().split(maxsplit=1)[0].lower()
-    if not command_root:
-        return False
+    parts = stripped.split(maxsplit=1)
+    input_command = parts[0].lower()
+    args = parts[1].strip() if len(parts) == 2 else ""
 
-    return command_root in allowed_commands
+    alias = command_aliases_by_input.get(input_command)
+    if alias is None:
+        return None
+
+    rcon_command = _build_rcon_command(alias, args)
+    if not rcon_command:
+        return None
+
+    return ParsedAliasCommand(
+        alias=alias,
+        input=alias.input,
+        args=args,
+        rcon_command=rcon_command,
+        show_response=alias.show_response,
+        success_message=alias.success_message,
+    )
+
+
+def _build_rcon_command(alias: CommandAlias, args: str) -> str:
+    if "{args}" not in alias.execute:
+        return alias.execute.strip()
+    return alias.execute.replace("{args}", args).strip()

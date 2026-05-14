@@ -4,11 +4,11 @@ Telegram-бот для управления несколькими Minecraft Pap
 
 ## Возможности
 
-- RCON-команды выполняются прямо в Telegram-топиках: например, напишите `list` в топике "Тест".
+- RCON-команды выполняются прямо в Telegram-топиках через безопасные алиасы: например, напишите `list` в топике "Тест".
 - Один Telegram-топик соответствует одному Minecraft-режиму из `topics.yml`.
 - Серверы и Telegram-команды загружаются из локального `servers.yml`.
 - Привязка Telegram-топиков к серверам загружается из локального `topics.yml`.
-- Разрешённые Minecraft-команды задаются whitelist-списком `allowed_commands`.
+- Доступные действия задаются в `command_aliases`: человек пишет `input`, а в RCON уходит только команда из `execute`.
 - Доступ ограничен одной беседой из `ALLOWED_CHAT_ID`.
 - Выдача доступа к режимам управляется через `ADMIN_IDS`, `/grant`, `/revoke` и локальный `topic_access.yml`.
 - `/chatid` работает в любом чате, чтобы узнать ID нужной беседы.
@@ -183,19 +183,49 @@ servers:
     password: "CHANGE_ME"
     telegram_command: "polit"
 
-allowed_commands:
-  - "list"
-  - "say"
+command_aliases:
+  ban:
+    input: "123"
+    execute: "ban {args}"
+    show_response: true
+
+  mute:
+    input: "mute"
+    execute: "tempmute {args}"
+    show_response: true
+
+  list:
+    input: "list"
+    execute: "list"
+    show_response: true
+
+  say:
+    input: "say"
+    execute: "say {args}"
+    show_response: false
+
+  srestart:
+    input: "srestart"
+    execute: "uar now 300"
+    show_response: false
+    success_message: "✅ Рестарт сервера запущен."
 ```
 
-`allowed_commands` — это whitelist. Бот берёт первую часть Minecraft-команды и сравнивает её со списком без учёта регистра. Если список пустой, запрещены все пользовательские Minecraft-команды.
+`command_aliases` — это безопасная карта команд. Пользователь пишет `input` в Telegram, бот берёт всё после `input` как `{args}` и отправляет в RCON только команду, собранную из `execute`.
 
-Держите whitelist минимальным. Не добавляйте опасные команды вроде `op`, `deop`, `stop`, `reload`, permission-management-команды или произвольные plugin console-команды, если всем участникам Telegram-беседы нельзя полностью доверять.
+Поля алиаса:
 
-Примеры:
+- `input` — что пишет человек в Telegram. Значение приводится к lowercase, не должно начинаться с `/` и не должно содержать пробелы.
+- `execute` — RCON-шаблон из конфига. Если в нём есть `{args}`, туда подставляется текст после `input`. Шаблон не должен состоять только из `{args}`.
+- `show_response` — показывать ли реальный ответ RCON-сервера. По умолчанию `true`.
+- `success_message` — необязательный текст успешного выполнения для `show_response: false`. Если он пустой или не указан, бот отправит стандартное `✅ Команда выполнена на <server.display_name>.`
 
-- `list` в топике проверяет `list`.
-- `say Привет` в топике проверяет `say`.
+Примеры сборки:
+
+- Пользователь пишет `123 Gendalf2475 7d Читы`, `execute: "ban {args}"` превращается в `ban Gendalf2475 7d Читы`.
+- Пользователь пишет `srestart test test`, `execute: "uar now 300"` не содержит `{args}`, поэтому в RCON уходит только `uar now 300`.
+
+Держите набор алиасов минимальным. Бот не отправляет пользовательский текст в RCON напрямую: команда всегда собирается из `execute`.
 
 ## 6. Как заполнить topics.yml
 
@@ -286,15 +316,18 @@ pip install -r requirements.txt
 python bot.py
 ```
 
-При старте бот проверит `.env`, `servers.yml`, `topics.yml`, список серверов, обязательные поля серверов и раздел `allowed_commands`. Если конфигурация некорректна, бот напишет понятную ошибку в консоль и не запустится.
+При старте бот проверит `.env`, `servers.yml`, `topics.yml`, список серверов, обязательные поля серверов и раздел `command_aliases`. Если конфигурация некорректна, бот напишет понятную ошибку в консоль и не запустится.
 
 ## 11. Примеры использования
 
 ```text
 list
 say Привет
+123 Gendalf2475 7d Читы
+srestart test test
 /test list
 /polit list
+/polit 123 Gendalf2475 7d Читы
 /status
 /players
 /ping
@@ -303,7 +336,7 @@ say Привет
 Основной формат в топике:
 
 ```text
-<minecraft_command>
+<alias_input> [аргументы]
 ```
 
 Например, если сообщение отправлено в топике "Тест":
@@ -318,7 +351,13 @@ list
 list
 ```
 
-Старый формат `/<telegram_command> <minecraft_command>` сохранён для совместимости, но если сервер привязан к топику, доступ к режиму всё равно проверяется.
+Формат через команду сервера:
+
+```text
+/<telegram_command> <alias_input> [аргументы]
+```
+
+Например, `/polit 123 Gendalf2475 7d Читы` отправит в RCON сервера `polit` команду `ban Gendalf2475 7d Читы`, если такой алиас настроен. Если сервер привязан к топику, доступ к режиму всё равно проверяется.
 
 ## 12. Частые ошибки
 
@@ -326,7 +365,7 @@ list
 - RCON выключен в `server.properties`.
 - Порт RCON занят другим процессом.
 - Firewall или правила хостинга блокируют порт.
-- Команда не добавлена в `allowed_commands`.
+- Алиас команды не добавлен в `command_aliases`.
 - `ALLOWED_CHAT_ID` не настроен или указан неверно.
 - `ADMIN_IDS` не содержит user_id суперадмина.
 - Топик не добавлен в `topics.yml` или указан неверный `thread_id`.

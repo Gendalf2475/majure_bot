@@ -4,7 +4,6 @@ from aiogram.types import Message
 
 from app.config.settings import BotSettings
 from app.middlewares.access import WRONG_CHAT_MESSAGE
-from app.utils.validation import is_minecraft_command_allowed
 
 
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."

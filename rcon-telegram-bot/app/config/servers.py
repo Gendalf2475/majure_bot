@@ -20,10 +20,20 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class CommandAlias:
+    key: str
+    input: str
+    execute: str
+    show_response: bool
+    success_message: str | None = None
+
+
+@dataclass(frozen=True)
 class ServersConfig:
     servers: dict[str, ServerConfig]
     servers_by_command: dict[str, ServerConfig]
-    allowed_commands: frozenset[str]
+    command_aliases: dict[str, CommandAlias]
+    command_aliases_by_input: dict[str, CommandAlias]
 
 
 def load_servers_config(base_dir: Path | None = None) -> ServersConfig:
@@ -48,22 +58,15 @@ def _load_servers(path: Path) -> ServersConfig:
 
     if "servers" not in raw_data:
         raise ConfigError("В servers.yml отсутствует раздел servers.")
-    if "allowed_commands" not in raw_data:
-        raise ConfigError("В servers.yml отсутствует раздел allowed_commands.")
+    if "command_aliases" not in raw_data:
+        raise ConfigError("В servers.yml отсутствует раздел command_aliases.")
 
     raw_servers = raw_data["servers"]
     if not isinstance(raw_servers, dict) or not raw_servers:
         raise ConfigError("В servers.yml должен быть хотя бы один сервер.")
 
-    raw_allowed_commands = raw_data["allowed_commands"]
-    if not isinstance(raw_allowed_commands, list):
-        raise ConfigError("Раздел allowed_commands должен быть списком.")
-
-    # Whitelist Minecraft-команд храним в нижнем регистре.
-    allowed_commands = frozenset(
-        str(command).strip().lower()
-        for command in raw_allowed_commands
-        if str(command).strip()
+    command_aliases, command_aliases_by_input = _parse_command_aliases(
+        raw_data["command_aliases"]
     )
 
     servers: dict[str, ServerConfig] = {}
@@ -107,7 +110,8 @@ def _load_servers(path: Path) -> ServersConfig:
     return ServersConfig(
         servers=servers,
         servers_by_command=servers_by_command,
-        allowed_commands=allowed_commands,
+        command_aliases=command_aliases,
+        command_aliases_by_input=command_aliases_by_input,
     )
 
 
@@ -141,3 +145,95 @@ def _normalize_telegram_command(command: str, server_key: str) -> str:
     if any(character.isspace() for character in normalized):
         raise ConfigError(f"telegram_command сервера {server_key} не должен содержать пробелы.")
     return normalized
+
+
+def _parse_command_aliases(
+    raw_command_aliases: Any,
+) -> tuple[dict[str, CommandAlias], dict[str, CommandAlias]]:
+    if not isinstance(raw_command_aliases, dict):
+        raise ConfigError("Раздел command_aliases должен быть YAML-словарем.")
+
+    command_aliases: dict[str, CommandAlias] = {}
+    command_aliases_by_input: dict[str, CommandAlias] = {}
+
+    for alias_key, alias_data in raw_command_aliases.items():
+        key = str(alias_key).strip()
+        if not key:
+            raise ConfigError("Ключ command_aliases не должен быть пустым.")
+        if not isinstance(alias_data, dict):
+            raise ConfigError(f"Алиас команды {key} должен быть YAML-словарем.")
+
+        input_command = _normalize_alias_input(alias_data.get("input"), key)
+        execute = _get_required_alias_string(alias_data, "execute", key)
+        _validate_alias_execute(execute, key)
+        show_response = _parse_alias_show_response(
+            alias_data.get("show_response", True),
+            key,
+        )
+        success_message = _parse_alias_success_message(alias_data.get("success_message"), key)
+
+        alias = CommandAlias(
+            key=key,
+            input=input_command,
+            execute=execute,
+            show_response=show_response,
+            success_message=success_message,
+        )
+
+        if input_command in command_aliases_by_input:
+            other_alias = command_aliases_by_input[input_command]
+            raise ConfigError(
+                "input команды "
+                f"{input_command} используется сразу для алиасов "
+                f"{other_alias.key} и {alias.key}."
+            )
+
+        command_aliases[key] = alias
+        command_aliases_by_input[input_command] = alias
+
+    return command_aliases, command_aliases_by_input
+
+
+def _get_required_alias_string(data: dict[str, Any], field_name: str, alias_key: str) -> str:
+    value = data.get(field_name)
+    if value is None or not str(value).strip():
+        raise ConfigError(f"У алиаса команды {alias_key} не заполнено поле {field_name}.")
+    return str(value).strip()
+
+
+def _normalize_alias_input(value: Any, alias_key: str) -> str:
+    input_command = _get_required_alias_string(
+        {"input": value},
+        "input",
+        alias_key,
+    ).lower()
+    if input_command.startswith("/"):
+        raise ConfigError(f"input алиаса команды {alias_key} не должен начинаться со slash.")
+    if any(character.isspace() for character in input_command):
+        raise ConfigError(f"input алиаса команды {alias_key} не должен содержать пробелы.")
+    return input_command
+
+
+def _validate_alias_execute(execute: str, alias_key: str) -> None:
+    if not execute.replace("{args}", "").strip():
+        raise ConfigError(
+            f"execute алиаса команды {alias_key} не должен состоять только из {{args}}."
+        )
+
+
+def _parse_alias_show_response(value: Any, alias_key: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"show_response алиаса команды {alias_key} должен быть bool.")
+    return value
+
+
+def _parse_alias_success_message(value: Any, alias_key: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(f"success_message алиаса команды {alias_key} должен быть строкой.")
+
+    success_message = value.strip()
+    if not success_message:
+        return None
+    return success_message

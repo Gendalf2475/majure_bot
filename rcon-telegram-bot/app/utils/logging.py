@@ -15,7 +15,7 @@ def setup_logging() -> None:
 
 
 def log_startup(logger: logging.Logger, settings: BotSettings, servers_config: ServersConfig) -> None:
-    # Логируем запуск без Telegram token, RCON-паролей, host:port и полного whitelist команд.
+    # Логируем запуск без Telegram token, RCON-паролей, host:port и RCON-шаблонов команд.
     logger.info("Запуск RCON Telegram-бота.")
     logger.info(
         "Загружены серверы: %s",
@@ -25,8 +25,8 @@ def log_startup(logger: logging.Logger, settings: BotSettings, servers_config: S
         ),
     )
     logger.info(
-        "Загружено разрешённых Minecraft-команд: %s",
-        len(servers_config.allowed_commands),
+        "Загружено алиасов команд: %s",
+        len(servers_config.command_aliases),
     )
     if settings.dry_run:
         logger.warning("DRY_RUN включён: серверные команды не будут отправляться в RCON.")

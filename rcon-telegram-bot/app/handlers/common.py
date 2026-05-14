@@ -11,7 +11,7 @@ from app.config.settings import BotSettings
 from app.config.topics import TopicsConfig
 from app.services.server_service import get_server_players_block, get_server_status_line
 from app.utils.text import (
-    build_allowed_commands_text,
+    build_command_aliases_text,
     build_server_command_lines,
     build_server_lines,
     build_topic_lines,
@@ -36,7 +36,7 @@ async def handle_start(
         "Топики:\n"
         f"{build_topic_lines(topics_config)}\n\n"
         "Пример использования:\n"
-        "напишите list в нужном топике"
+        "напишите алиас list в нужном топике"
     )
     await message.answer(text)
 
@@ -47,7 +47,7 @@ async def handle_help(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
 ) -> None:
-    # Подробная справка: служебные команды, серверные команды и whitelist Minecraft-команд.
+    # Подробная справка: служебные команды, серверные команды и доступные алиасы.
     text = (
         "📌 Команды бота:\n\n"
         "/start — информация о боте\n"
@@ -55,7 +55,7 @@ async def handle_help(
         "/servers — список серверов\n"
         "/status — проверить доступность RCON-серверов\n"
         "/players — онлайн игроков на всех серверах\n"
-        "RCON в топике — напишите Minecraft-команду обычным сообщением\n"
+        "RCON в топике — напишите алиас команды обычным сообщением\n"
         "/grant <user_id> <topic_key> — выдать доступ к режиму\n"
         "/revoke <user_id> <topic_key> — отозвать доступ к режиму\n"
         "/access — показать выданные режимы\n"
@@ -69,8 +69,8 @@ async def handle_help(
         "list\n"
         "say Проверка\n"
         "/polit list\n\n"
-        "✅ Разрешённые Minecraft-команды:\n"
-        f"{build_allowed_commands_text(servers_config)}"
+        "✅ Доступные алиасы команд:\n"
+        f"{build_command_aliases_text(servers_config)}"
     )
     await message.answer(text)
 
