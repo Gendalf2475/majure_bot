@@ -17,12 +17,13 @@ Never commit real local configuration:
 - `.env`
 - `.env.*`
 - `*.env`
+- `bot_commands.yml`
 - `servers.yml`
 - `topics.yml`
 - `topic_access.yml`
 - logs, databases, and backups
 
-Commit only template files such as `.env.example`, `servers.yml.example`, `topics.yml.example`, and `topic_access.yml.example`.
+Commit only template files such as `.env.example`, `bot_commands.yml.example`, `servers.yml.example`, `topics.yml.example`, and `topic_access.yml.example`.
 
 If a Telegram bot token, RCON password, server IP, or chat ID was committed or shared by mistake, treat it as compromised:
 
@@ -44,4 +45,4 @@ Minecraft RCON should be treated as an administrative interface.
 
 ## Telegram Access
 
-The bot first restricts commands by `ALLOWED_CHAT_ID`. RCON commands in forum topics additionally require per-topic access from `topic_access.yml` or a user ID listed in `ADMIN_IDS`. Add the bot only to trusted chats and keep group membership under control.
+The bot first restricts commands by `ALLOWED_CHAT_ID`. Service command visibility and access can be tightened in `bot_commands.yml`. RCON commands in forum topics additionally require per-topic access from `topic_access.yml` or a user ID listed in `ADMIN_IDS`. Add the bot only to trusted chats and keep group membership under control.

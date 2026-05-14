@@ -5,10 +5,17 @@ from typing import Any
 
 import yaml
 
+from app.config.bot_commands import (
+    BOT_COMMAND_ACCESS_SUPERADMIN,
+    BotCommandsConfig,
+)
 from app.config.settings import BotSettings, ConfigError
 
 
 ACCESS_FILE_NAME = "topic_access.yml"
+BOT_COMMAND_DENIAL_DISABLED = "disabled"
+BOT_COMMAND_DENIAL_ADMIN_ONLY = "admin_only"
+BOT_COMMAND_DENIAL_NO_BOT_ACCESS = "no_bot_access"
 
 
 class TopicAccessStore:
@@ -118,6 +125,43 @@ def can_use_bot_service_commands(
     store: TopicAccessStore,
 ) -> bool:
     return has_any_topic_access(user_id, settings, store)
+
+
+def can_use_bot_command(
+    command_key: str,
+    user_id: int | None,
+    settings: BotSettings,
+    store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> bool:
+    return get_bot_command_denial_reason(
+        command_key,
+        user_id,
+        settings,
+        store,
+        bot_commands_config,
+    ) is None
+
+
+def get_bot_command_denial_reason(
+    command_key: str,
+    user_id: int | None,
+    settings: BotSettings,
+    store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> str | None:
+    command = bot_commands_config.commands[command_key]
+    if not command.enabled:
+        return BOT_COMMAND_DENIAL_DISABLED
+    if command.access == BOT_COMMAND_ACCESS_SUPERADMIN:
+        if is_superadmin(user_id, settings):
+            return None
+        if has_any_topic_access(user_id, settings, store):
+            return BOT_COMMAND_DENIAL_ADMIN_ONLY
+        return BOT_COMMAND_DENIAL_NO_BOT_ACCESS
+    if has_any_topic_access(user_id, settings, store):
+        return None
+    return BOT_COMMAND_DENIAL_NO_BOT_ACCESS
 
 
 def can_manage_access(user_id: int | None, settings: BotSettings) -> bool:

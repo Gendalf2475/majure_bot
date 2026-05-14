@@ -7,9 +7,11 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import Message, TelegramObject
 
+from app.config.bot_commands import BotCommandsConfig
 from app.config.servers import ServersConfig
 from app.config.settings import BotSettings
 from app.services.topic_access_service import (
+    can_use_bot_command,
     can_use_bot_service_commands,
     can_use_topic,
     is_superadmin,
@@ -84,8 +86,17 @@ class CommandCooldownMiddleware(BaseMiddleware):
         topics_config = data.get("topics_config")
         if topic_access_store is None or topics_config is None:
             return True
+        bot_commands_config = data.get("bot_commands_config")
 
         if command in {"status", "players"}:
+            if isinstance(bot_commands_config, BotCommandsConfig):
+                return can_use_bot_command(
+                    command,
+                    user_id,
+                    self.settings,
+                    topic_access_store,
+                    bot_commands_config,
+                )
             return can_use_bot_service_commands(user_id, self.settings, topic_access_store)
 
         if is_topic_text_command or command == "cmd":

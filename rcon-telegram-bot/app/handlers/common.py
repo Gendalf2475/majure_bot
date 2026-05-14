@@ -8,14 +8,22 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from app.config.bot_commands import (
+    BOT_COMMAND_ACCESS_ADMIN,
+    BOT_COMMAND_ACCESS_SUPERADMIN,
+    BotCommandConfig,
+    BotCommandsConfig,
+)
 from app.config.servers import ServerConfig, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
 from app.services.rcon_service import mask_host
 from app.services.server_service import get_server_players_block, get_server_status_line
 from app.services.topic_access_service import (
+    BOT_COMMAND_DENIAL_ADMIN_ONLY,
+    BOT_COMMAND_DENIAL_DISABLED,
     TopicAccessStore,
-    can_use_bot_service_commands,
+    get_bot_command_denial_reason,
     get_user_topic_keys,
     is_superadmin,
 )
@@ -26,6 +34,12 @@ common_router = Router()
 
 NO_BOT_ACCESS_MESSAGE = "⛔ У вас нет доступа к этому боту.\nОбратитесь к администратору."
 ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам."
+DISABLED_COMMAND_MESSAGE = "❌ Эта команда временно отключена."
+BOT_COMMAND_LABELS = {
+    "grant": "/grant <user_id> <topic_key>",
+    "revoke": "/revoke <user_id> <topic_key>",
+    "access": "/access [user_id]",
+}
 
 
 @common_router.message(Command("start"))
@@ -35,10 +49,17 @@ async def handle_start(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "start",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     superadmin = is_superadmin(user_id, settings)
@@ -63,15 +84,27 @@ async def handle_help(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "help",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     superadmin = is_superadmin(user_id, settings)
     topics = _get_visible_topics(user_id, settings, topic_access_store, topics_config)
     servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    bot_commands_text = _build_bot_command_lines(
+        bot_commands_config,
+        include_admin=True,
+        include_superadmin=superadmin,
+    )
     command_aliases_text = build_command_aliases_text(
         servers_config,
         include_admin=True,
@@ -79,9 +112,9 @@ async def handle_help(
     )
 
     if superadmin:
-        text = _build_superadmin_help(topics, servers, command_aliases_text)
+        text = _build_superadmin_help(bot_commands_text, topics, servers, command_aliases_text)
     else:
-        text = _build_user_help(servers, command_aliases_text)
+        text = _build_user_help(bot_commands_text, servers, command_aliases_text)
     await message.answer(text)
 
 
@@ -92,10 +125,17 @@ async def handle_servers(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "servers",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
@@ -103,17 +143,39 @@ async def handle_servers(
 
 
 @common_router.message(Command("ping"))
-async def handle_ping(message: Message, settings: BotSettings) -> None:
-    if not is_superadmin(_get_user_id(message), settings):
-        await message.answer(ADMIN_ONLY_MESSAGE)
+async def handle_ping(
+    message: Message,
+    settings: BotSettings,
+    topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> None:
+    if await _answer_bot_command_denial(
+        message,
+        "ping",
+        _get_user_id(message),
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
     await message.answer("✅ Бот работает.")
 
 
 @common_router.message(Command("chatid"))
-async def handle_chatid(message: Message, settings: BotSettings) -> None:
-    if not is_superadmin(_get_user_id(message), settings):
-        await message.answer(ADMIN_ONLY_MESSAGE)
+async def handle_chatid(
+    message: Message,
+    settings: BotSettings,
+    topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> None:
+    if await _answer_bot_command_denial(
+        message,
+        "chatid",
+        _get_user_id(message),
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
     await message.answer(f"Chat ID этой беседы: {message.chat.id}")
 
@@ -156,10 +218,17 @@ async def handle_status(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "status",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
@@ -178,10 +247,17 @@ async def handle_players(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "players",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
@@ -195,9 +271,41 @@ def _get_user_id(message: Message) -> int | None:
     return message.from_user.id if message.from_user else None
 
 
-def _build_user_help(servers: list[ServerConfig], command_aliases_text: str) -> str:
+async def _answer_bot_command_denial(
+    message: Message,
+    command_key: str,
+    user_id: int | None,
+    settings: BotSettings,
+    topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> bool:
+    denial_reason = get_bot_command_denial_reason(
+        command_key,
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    )
+    if denial_reason is None:
+        return False
+    if denial_reason == BOT_COMMAND_DENIAL_DISABLED:
+        await message.answer(DISABLED_COMMAND_MESSAGE)
+    elif denial_reason == BOT_COMMAND_DENIAL_ADMIN_ONLY:
+        await message.answer(ADMIN_ONLY_MESSAGE)
+    else:
+        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    return True
+
+
+def _build_user_help(
+    bot_commands_text: str,
+    servers: list[ServerConfig],
+    command_aliases_text: str,
+) -> str:
     return (
         "🛠 Доступные команды:\n\n"
+        "Служебные:\n"
+        f"{bot_commands_text}\n\n"
         "Серверы:\n"
         f"{_format_server_command_lines(servers)}\n\n"
         "Алиасы:\n"
@@ -209,6 +317,7 @@ def _build_user_help(servers: list[ServerConfig], command_aliases_text: str) -> 
 
 
 def _build_superadmin_help(
+    bot_commands_text: str,
     topics: list[TopicConfig],
     servers: list[ServerConfig],
     command_aliases_text: str,
@@ -216,16 +325,7 @@ def _build_superadmin_help(
     return (
         "🛠 Команды администратора:\n\n"
         "Служебные:\n"
-        "• /start — информация о боте\n"
-        "• /help — помощь\n"
-        "• /servers — список серверов\n"
-        "• /status — статус RCON\n"
-        "• /players — онлайн игроков\n"
-        "• /grant <user_id> <topic_key> — выдать доступ\n"
-        "• /revoke <user_id> <topic_key> — отозвать доступ\n"
-        "• /access [user_id] — показать доступы\n"
-        "• /chatid — ID текущей беседы\n"
-        "• /ping — проверить бота\n\n"
+        f"{bot_commands_text}\n\n"
         "Серверы:\n"
         f"{_format_server_command_lines(servers)}\n\n"
         "Топики:\n"
@@ -243,6 +343,39 @@ def _format_diag_server_lines(servers_config: ServersConfig) -> list[str]:
         f"password_set={bool(server.password)}"
         for server in servers_config.servers.values()
     ]
+
+
+def _build_bot_command_lines(
+    bot_commands_config: BotCommandsConfig,
+    *,
+    include_admin: bool,
+    include_superadmin: bool,
+) -> str:
+    visible_commands = [
+        command
+        for command in bot_commands_config.commands.values()
+        if command.enabled
+        and (
+            (include_admin and command.access == BOT_COMMAND_ACCESS_ADMIN)
+            or (include_superadmin and command.access == BOT_COMMAND_ACCESS_SUPERADMIN)
+        )
+    ]
+    if not visible_commands:
+        return "нет"
+    return "\n".join(
+        _format_bot_command_line(command, superadmin_view=include_superadmin)
+        for command in visible_commands
+    )
+
+
+def _format_bot_command_line(command: BotCommandConfig, *, superadmin_view: bool) -> str:
+    if command.key == "access" and not superadmin_view:
+        command_label = "/access"
+    else:
+        command_label = BOT_COMMAND_LABELS.get(command.key, f"/{command.key}")
+    if command.description:
+        return f"• {command_label} — {command.description}"
+    return f"• {command_label}"
 
 
 def _get_visible_topics(

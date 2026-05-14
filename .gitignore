@@ -5,6 +5,7 @@
 rcon-telegram-bot/servers.yml
 rcon-telegram-bot/topics.yml
 rcon-telegram-bot/topic_access.yml
+rcon-telegram-bot/bot_commands.yml
 
 *.log
 *.db

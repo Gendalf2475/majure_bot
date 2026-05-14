@@ -6,6 +6,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
+from app.config.bot_commands import load_bot_commands_config
 from app.config.servers import load_servers_config
 from app.config.settings import ConfigError, load_settings
 from app.config.topics import load_topics_config
@@ -25,10 +26,11 @@ async def main() -> None:
     # Включаем понятный вывод логов в консоль.
     setup_logging()
 
-    # Загружаем .env, servers.yml, topics.yml и локальные доступы.
+    # Загружаем .env, YAML-конфиги и локальные доступы.
     # Если конфигурация неверная, бот не запускается.
     try:
         settings = load_settings()
+        bot_commands_config = load_bot_commands_config()
         servers_config = load_servers_config()
         topics_config = load_topics_config(servers_config)
         topic_access_store = TopicAccessStore()
@@ -66,6 +68,7 @@ async def main() -> None:
     await dispatcher.start_polling(
         bot,
         settings=settings,
+        bot_commands_config=bot_commands_config,
         servers_config=servers_config,
         topics_config=topics_config,
         topic_access_store=topic_access_store,

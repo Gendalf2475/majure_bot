@@ -1,0 +1,50 @@
+bot_commands:
+  start:
+    enabled: true
+    access: admin
+    description: "Информация о боте"
+
+  help:
+    enabled: true
+    access: admin
+    description: "Показывает помощь"
+
+  servers:
+    enabled: true
+    access: admin
+    description: "Список доступных серверов"
+
+  status:
+    enabled: true
+    access: admin
+    description: "Проверить доступность RCON-серверов"
+
+  players:
+    enabled: true
+    access: admin
+    description: "Онлайн игроков на доступных серверах"
+
+  ping:
+    enabled: true
+    access: superadmin
+    description: "Проверить работу бота"
+
+  chatid:
+    enabled: true
+    access: superadmin
+    description: "Показать ID текущей беседы"
+
+  grant:
+    enabled: true
+    access: superadmin
+    description: "Выдать доступ к режиму"
+
+  revoke:
+    enabled: true
+    access: superadmin
+    description: "Отозвать доступ к режиму"
+
+  access:
+    enabled: true
+    access: admin
+    description: "Показать выданные доступы"

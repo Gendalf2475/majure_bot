@@ -4,15 +4,19 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from app.config.bot_commands import BotCommandsConfig
 from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
 from app.services.server_service import execute_server_command
 from app.services.topic_access_service import (
+    BOT_COMMAND_DENIAL_ADMIN_ONLY,
+    BOT_COMMAND_DENIAL_DISABLED,
     TopicAccessStore,
     can_manage_access,
     can_use_topic,
     can_use_bot_service_commands,
+    get_bot_command_denial_reason,
     get_user_topic_keys,
     is_superadmin,
 )
@@ -165,9 +169,17 @@ async def handle_grant_access(
     settings: BotSettings,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
-    if not can_manage_access(_get_user_id(message), settings):
-        await message.answer(ADMIN_ONLY_MESSAGE)
+    user_id = _get_user_id(message)
+    if await _answer_bot_command_denial(
+        message,
+        "grant",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     target = _parse_access_change_target(message, topics_config, "grant")
@@ -189,9 +201,17 @@ async def handle_revoke_access(
     settings: BotSettings,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
-    if not can_manage_access(_get_user_id(message), settings):
-        await message.answer(ADMIN_ONLY_MESSAGE)
+    user_id = _get_user_id(message)
+    if await _answer_bot_command_denial(
+        message,
+        "revoke",
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     target = _parse_access_change_target(message, topics_config, "revoke")
@@ -213,11 +233,18 @@ async def handle_access_list(
     settings: BotSettings,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     sender_user_id = _get_user_id(message)
     _, arguments = parse_telegram_command(message.text or "")
-    if not can_use_bot_service_commands(sender_user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    if await _answer_bot_command_denial(
+        message,
+        "access",
+        sender_user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    ):
         return
 
     if arguments or message.reply_to_message:
@@ -269,6 +296,32 @@ async def _get_topic_for_message(message: Message, topics_config: TopicsConfig) 
         await message.answer(UNKNOWN_TOPIC_MESSAGE)
         return None
     return topic
+
+
+async def _answer_bot_command_denial(
+    message: Message,
+    command_key: str,
+    user_id: int | None,
+    settings: BotSettings,
+    topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
+) -> bool:
+    denial_reason = get_bot_command_denial_reason(
+        command_key,
+        user_id,
+        settings,
+        topic_access_store,
+        bot_commands_config,
+    )
+    if denial_reason is None:
+        return False
+    if denial_reason == BOT_COMMAND_DENIAL_DISABLED:
+        await message.answer(DISABLED_COMMAND_MESSAGE)
+    elif denial_reason == BOT_COMMAND_DENIAL_ADMIN_ONLY:
+        await message.answer(ADMIN_ONLY_MESSAGE)
+    else:
+        await message.answer(NO_BOT_ACCESS_MESSAGE)
+    return True
 
 
 def _parse_access_change_target(
