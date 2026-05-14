@@ -9,11 +9,11 @@ from app.config.topics import TopicConfig, TopicsConfig
 from app.services.server_service import execute_server_command, get_server_by_command
 from app.services.topic_access_service import (
     TopicAccessStore,
+    can_use_bot_service_commands,
     can_use_topic,
-    is_admin_user,
+    is_superadmin,
 )
 from app.utils.validation import (
-    ParsedAliasCommand,
     SERVICE_COMMANDS,
     parse_alias_command,
     parse_telegram_command,
@@ -25,6 +25,7 @@ server_commands_router = Router()
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
 DISABLED_COMMAND_MESSAGE = "❌ Эта команда временно отключена."
 COMMAND_ACCESS_DENIED_MESSAGE = "⛔ У вас нет доступа к этой команде."
+NO_BOT_ACCESS_MESSAGE = "⛔ У вас нет доступа к этому боту.\nОбратитесь к администратору."
 
 
 @server_commands_router.message(F.text.startswith("/"))
@@ -42,10 +43,20 @@ async def handle_server_command(
     if command in SERVICE_COMMANDS:
         return
 
+    user_id = message.from_user.id if message.from_user else None
+    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
+        await message.answer(NO_BOT_ACCESS_MESSAGE)
+        return
+
     # Telegram-команда должна совпасть с telegram_command одного из серверов.
     server = get_server_by_command(command, servers_config)
     if server is None:
         await message.answer("❌ Сервер не найден.")
+        return
+
+    topic = topics_config.topics_by_server_key.get(server.key)
+    if not _can_use_server_mode(user_id, topic, settings, topic_access_store):
+        await message.answer(f"⛔ У вас нет доступа к режиму {server.display_name}.")
         return
 
     if not arguments:
@@ -63,19 +74,11 @@ async def handle_server_command(
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
         return
 
-    topic = topics_config.topics_by_server_key.get(server.key)
-    user_id = message.from_user.id if message.from_user else None
     if not parsed_command.alias.enabled:
         await message.answer(DISABLED_COMMAND_MESSAGE)
         return
 
-    if not _can_execute_alias_command(
-        parsed_command,
-        user_id,
-        topic,
-        settings,
-        topic_access_store,
-    ):
+    if parsed_command.alias.access == ALIAS_ACCESS_SUPERADMIN and not is_superadmin(user_id, settings):
         await message.answer(COMMAND_ACCESS_DENIED_MESSAGE)
         return
 
@@ -100,18 +103,16 @@ async def handle_server_command(
     )
 
 
-def _can_execute_alias_command(
-    parsed_command: ParsedAliasCommand,
+def _can_use_server_mode(
     user_id: int | None,
     topic: TopicConfig | None,
     settings: BotSettings,
     topic_access_store: TopicAccessStore,
 ) -> bool:
-    if parsed_command.alias.access == ALIAS_ACCESS_SUPERADMIN:
-        return is_admin_user(user_id, settings)
-
-    if topic is None:
+    if is_superadmin(user_id, settings):
         return True
+    if topic is None:
+        return False
     return can_use_topic(user_id, topic.key, settings, topic_access_store)
 
 

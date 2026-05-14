@@ -13,7 +13,7 @@ from app.utils.validation import parse_telegram_command
 
 logger = logging.getLogger(__name__)
 
-WRONG_CHAT_MESSAGE = "⛔ Этот бот работает только в разрешённой беседе."
+WRONG_CHAT_MESSAGE = "⛔ У вас нет доступа к этому боту."
 
 
 class AccessMiddleware(BaseMiddleware):
@@ -43,15 +43,15 @@ class AccessMiddleware(BaseMiddleware):
         command = ""
         if text.startswith("/"):
             command, _ = parse_telegram_command(text)
-        if command == "chatid":
-            # /chatid работает в любом чате, чтобы можно было узнать ID нужной беседы.
+        user_id = event.from_user.id if event.from_user else None
+        if command == "chatid" and user_id in self.settings.admin_ids:
             return await handler(event, data)
 
         # Все команды и RCON-текст в топиках бот выполняет только в одной разрешённой беседе.
         if event.chat.id != self.settings.allowed_chat_id:
             logger.warning(
                 "Bot action from wrong chat: user_id=%s chat_id=%s",
-                event.from_user.id if event.from_user else None,
+                user_id,
                 event.chat.id,
             )
             await event.answer(WRONG_CHAT_MESSAGE)

@@ -92,8 +92,40 @@ def is_admin_user(user_id: int | None, settings: BotSettings) -> bool:
     return user_id is not None and user_id in settings.admin_ids
 
 
+def is_superadmin(user_id: int | None, settings: BotSettings) -> bool:
+    return is_admin_user(user_id, settings)
+
+
+def get_user_topic_keys(user_id: int | None, store: TopicAccessStore) -> list[str]:
+    if user_id is None:
+        return []
+    return store.get_user_topics(user_id)
+
+
+def has_any_topic_access(
+    user_id: int | None,
+    settings: BotSettings,
+    store: TopicAccessStore,
+) -> bool:
+    if is_superadmin(user_id, settings):
+        return True
+    return bool(get_user_topic_keys(user_id, store))
+
+
+def can_use_bot_service_commands(
+    user_id: int | None,
+    settings: BotSettings,
+    store: TopicAccessStore,
+) -> bool:
+    return has_any_topic_access(user_id, settings, store)
+
+
+def can_manage_access(user_id: int | None, settings: BotSettings) -> bool:
+    return is_superadmin(user_id, settings)
+
+
 def can_use_topic(user_id: int | None, topic_key: str, settings: BotSettings, store: TopicAccessStore) -> bool:
-    if is_admin_user(user_id, settings):
+    if is_superadmin(user_id, settings):
         return True
     if user_id is None:
         return False
