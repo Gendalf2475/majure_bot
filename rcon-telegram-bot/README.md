@@ -358,6 +358,29 @@ python bot.py
 
 При старте бот проверит `.env`, `servers.yml`, `topics.yml`, список серверов, обязательные поля серверов и раздел `command_aliases`. Если конфигурация некорректна, бот напишет понятную ошибку в консоль и не запустится.
 
+При запуске бот пишет безопасную диагностику конфига: путь к `servers.yml`, найденные верхние YAML-ключи, количество алиасов, server key, display_name, замаскированный host, port и `password_set=true/false`. Пароли и Telegram token в логи не выводятся.
+
+## 10.1. Docker/deploy
+
+`servers.yml` не хранится в git и игнорируется как локальный файл с секретами. Если Docker-образ собирается только из git-репозитория, реальный `servers.yml` в образ не попадёт. Его нужно передать в контейнер отдельно: bind mount, volume или секретом деплоя.
+
+Пример bind mount:
+
+```yaml
+services:
+  rcon-telegram-bot:
+    volumes:
+      - ./servers.yml:/app/servers.yml:ro
+      - ./topics.yml:/app/topics.yml:ro
+      - ./topic_access.yml:/app/topic_access.yml
+```
+
+Путь справа должен совпадать с `WORKDIR` контейнера. Если `WORKDIR` не `/app`, укажите путь к `servers.yml` рядом с `bot.py`.
+
+Не копируйте `servers.yml.example` поверх реального `servers.yml` при сборке или запуске контейнера. В шаблоне стоят примерные `host`, `port` и `password`.
+
+Если Minecraft-сервер запущен на хост-машине, `127.0.0.1` внутри контейнера указывает на сам контейнер, а не на хост. Используйте подходящий адрес хоста, `host.docker.internal` там, где он доступен, общую Docker-сеть или `network_mode: host`, если это осознанно подходит вашему окружению.
+
 ## 11. Примеры использования
 
 ```text

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import socket
 
 from mcrcon import MCRcon, MCRconException
@@ -35,13 +36,54 @@ async def check_rcon_available(server: ServerConfig, timeout_seconds: float) -> 
 
 def sanitize_error(error: BaseException, server: ServerConfig) -> str:
     # Перед логами и сообщениями пользователю удаляем приватные данные из текста ошибки.
-    message = str(error) or error.__class__.__name__
+    message = str(error) or _get_cause_message(error) or error.__class__.__name__
     if server.host:
         message = message.replace(f"{server.host}:{server.port}", "***")
         message = message.replace(server.host, "***")
     if server.password:
         message = message.replace(server.password, "***")
     return message
+
+
+def get_error_cause_class(error: BaseException) -> str | None:
+    if error.__cause__ is None:
+        return None
+    return error.__cause__.__class__.__name__
+
+
+def mask_host(host: str) -> str:
+    stripped = host.strip()
+    if not stripped:
+        return "<empty>"
+
+    try:
+        ip_address = ipaddress.ip_address(stripped)
+    except ValueError:
+        return _mask_hostname(stripped)
+
+    if ip_address.version == 4:
+        octets = stripped.split(".")
+        return ".".join([octets[0], octets[1], octets[2], "*"])
+    return f"{stripped.split(':', maxsplit=1)[0]}:***"
+
+
+def _get_cause_message(error: BaseException) -> str:
+    if error.__cause__ is None:
+        return ""
+    return str(error.__cause__)
+
+
+def _mask_hostname(host: str) -> str:
+    parts = host.split(".")
+    if len(parts) == 1:
+        return _mask_label(host)
+    return ".".join([_mask_label(parts[0]), *parts[1:]])
+
+
+def _mask_label(label: str) -> str:
+    if len(label) <= 2:
+        return "*" * len(label)
+    return f"{label[:2]}***"
 
 
 def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_seconds: float) -> str:

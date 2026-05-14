@@ -42,6 +42,9 @@ class ServersConfig:
     servers_by_command: dict[str, ServerConfig]
     command_aliases: dict[str, CommandAlias]
     command_aliases_by_input: dict[str, CommandAlias]
+    source_path: Path
+    source_exists: bool
+    source_keys: tuple[str, ...]
 
 
 def load_servers_config(base_dir: Path | None = None) -> ServersConfig:
@@ -63,6 +66,7 @@ def _load_servers(path: Path) -> ServersConfig:
 
     if not isinstance(raw_data, dict):
         raise ConfigError("servers.yml должен содержать YAML-словарь.")
+    source_keys = tuple(str(key) for key in raw_data.keys())
 
     if "servers" not in raw_data:
         raise ConfigError("В servers.yml отсутствует раздел servers.")
@@ -120,6 +124,9 @@ def _load_servers(path: Path) -> ServersConfig:
         servers_by_command=servers_by_command,
         command_aliases=command_aliases,
         command_aliases_by_input=command_aliases_by_input,
+        source_path=path.resolve(),
+        source_exists=path.exists(),
+        source_keys=source_keys,
     )
 
 

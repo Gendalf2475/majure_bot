@@ -12,6 +12,8 @@ from app.services.rcon_service import (
     RconTimeoutError,
     check_rcon_available,
     execute_rcon_command,
+    get_error_cause_class,
+    mask_host,
     sanitize_error,
 )
 from app.utils.text import MAX_TELEGRAM_CHUNK_SIZE, format_seconds
@@ -30,16 +32,30 @@ async def get_server_status_line(server: ServerConfig, settings: BotSettings) ->
     try:
         await check_rcon_available(server, settings.rcon_timeout_seconds)
         return f"✅ {server.display_name} — доступен"
-    except RconTimeoutError:
-        logger.warning("RCON status timeout: server=%s", server.key)
+    except RconTimeoutError as error:
+        logger.warning(
+            "RCON status timeout: server=%s host=%s port=%s "
+            "error_class=%s cause_class=%s error=%s",
+            server.key,
+            mask_host(server.host),
+            server.port,
+            error.__class__.__name__,
+            get_error_cause_class(error),
+            sanitize_error(error, server),
+        )
         return (
             f"❌ {server.display_name} — сервер не ответил за "
             f"{format_seconds(settings.rcon_timeout_seconds)} секунд"
         )
     except (RconConnectionError, RconCommandError) as error:
         logger.warning(
-            "RCON status error: server=%s error=%s",
+            "RCON status error: server=%s host=%s port=%s "
+            "error_class=%s cause_class=%s error=%s",
             server.key,
+            mask_host(server.host),
+            server.port,
+            error.__class__.__name__,
+            get_error_cause_class(error),
             sanitize_error(error, server),
         )
         return f"❌ {server.display_name} — RCON недоступен"
@@ -51,16 +67,30 @@ async def get_server_players_block(server: ServerConfig, settings: BotSettings) 
         response = await _execute_list_command_with_fallback(server, settings.rcon_timeout_seconds)
         players_response = response.strip() or PLAYERS_EMPTY_LIST_MESSAGE
         return f"{server.display_name}\n{players_response}"
-    except RconTimeoutError:
-        logger.warning("RCON players timeout: server=%s", server.key)
+    except RconTimeoutError as error:
+        logger.warning(
+            "RCON players timeout: server=%s host=%s port=%s "
+            "error_class=%s cause_class=%s error=%s",
+            server.key,
+            mask_host(server.host),
+            server.port,
+            error.__class__.__name__,
+            get_error_cause_class(error),
+            sanitize_error(error, server),
+        )
         return (
             f"{server.display_name}\n"
             f"❌ Сервер не ответил за {format_seconds(settings.rcon_timeout_seconds)} секунд."
         )
     except (RconConnectionError, RconCommandError) as error:
         logger.warning(
-            "RCON players error: server=%s error=%s",
+            "RCON players error: server=%s host=%s port=%s "
+            "error_class=%s cause_class=%s error=%s",
             server.key,
+            mask_host(server.host),
+            server.port,
+            error.__class__.__name__,
+            get_error_cause_class(error),
             sanitize_error(error, server),
         )
         return f"{server.display_name}\n❌ Недоступен"
@@ -84,21 +114,32 @@ async def execute_server_command(
             commands,
             settings.rcon_timeout_seconds,
         )
-    except RconTimeoutError:
+    except RconTimeoutError as error:
         logger.warning(
-            "RCON command timeout: server=%s user_id=%s command=%s",
+            "RCON command timeout: server=%s host=%s port=%s user_id=%s command=%s "
+            "error_class=%s cause_class=%s error=%s",
             server.key,
+            mask_host(server.host),
+            server.port,
             _get_user_id_for_log(message),
             command_root,
+            error.__class__.__name__,
+            get_error_cause_class(error),
+            sanitize_error(error, server),
         )
         await message.answer(f"❌ Сервер не ответил за {format_seconds(settings.rcon_timeout_seconds)} секунд.")
         return
     except RconConnectionError as error:
         logger.warning(
-            "RCON connection error: server=%s user_id=%s command=%s error=%s",
+            "RCON connection error: server=%s host=%s port=%s user_id=%s command=%s "
+            "error_class=%s cause_class=%s error=%s",
             server.key,
+            mask_host(server.host),
+            server.port,
             _get_user_id_for_log(message),
             command_root,
+            error.__class__.__name__,
+            get_error_cause_class(error),
             sanitize_error(error, server),
         )
         await message.answer(
@@ -108,10 +149,15 @@ async def execute_server_command(
         return
     except RconCommandError as error:
         logger.warning(
-            "RCON command error: server=%s user_id=%s command=%s error=%s",
+            "RCON command error: server=%s host=%s port=%s user_id=%s command=%s "
+            "error_class=%s cause_class=%s error=%s",
             server.key,
+            mask_host(server.host),
+            server.port,
             _get_user_id_for_log(message),
             command_root,
+            error.__class__.__name__,
+            get_error_cause_class(error),
             sanitize_error(error, server),
         )
         await message.answer(f"❌ Ошибка выполнения команды: {sanitize_error(error, server)}")
