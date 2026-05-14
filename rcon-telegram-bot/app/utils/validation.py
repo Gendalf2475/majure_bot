@@ -13,6 +13,7 @@ SERVICE_COMMANDS = {
     "status",
     "players",
     "chatid",
+    "diag",
     "ping",
     "cmd",
     "grant",

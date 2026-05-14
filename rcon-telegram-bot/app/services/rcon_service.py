@@ -99,11 +99,11 @@ def _execute_rcon_command_sync(server: ServerConfig, command: str, timeout_secon
             response = rcon.command(command)
             return response or ""
     except (socket.timeout, TimeoutError) as error:
-        raise RconTimeoutError from error
+        raise RconTimeoutError(str(error) or error.__class__.__name__) from error
     except (ConnectionError, OSError, MCRconException) as error:
-        raise RconConnectionError from error
+        raise RconConnectionError(str(error) or error.__class__.__name__) from error
     except Exception as error:
-        raise RconCommandError(str(error)) from error
+        raise RconCommandError(str(error) or error.__class__.__name__) from error
 
 
 def _check_rcon_available_sync(server: ServerConfig, timeout_seconds: float) -> None:
@@ -118,8 +118,8 @@ def _check_rcon_available_sync(server: ServerConfig, timeout_seconds: float) -> 
         ):
             return
     except (socket.timeout, TimeoutError) as error:
-        raise RconTimeoutError from error
+        raise RconTimeoutError(str(error) or error.__class__.__name__) from error
     except (ConnectionError, OSError, MCRconException) as error:
-        raise RconConnectionError from error
+        raise RconConnectionError(str(error) or error.__class__.__name__) from error
     except Exception as error:
-        raise RconCommandError(str(error)) from error
+        raise RconCommandError(str(error) or error.__class__.__name__) from error

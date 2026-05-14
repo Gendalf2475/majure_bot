@@ -44,6 +44,8 @@ class TopicAccessStore:
     def _load(self) -> dict[int, set[str]]:
         if not self.path.exists():
             return {}
+        if not self.path.is_file():
+            raise ConfigError(f"{self.path.name} должен быть файлом, а не директорией.")
 
         try:
             raw_data = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}

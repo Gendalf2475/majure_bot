@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import platform
+from importlib import metadata
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -10,6 +12,7 @@ from app.config.servers import ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicsConfig
 from app.services.server_service import get_server_players_block, get_server_status_line
+from app.services.rcon_service import mask_host
 from app.services.topic_access_service import TopicAccessStore, is_admin_user
 from app.utils.text import (
     build_command_aliases_text,
@@ -21,6 +24,7 @@ from app.utils.text import (
 
 
 common_router = Router()
+DIAG_ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только суперадминам."
 
 
 @common_router.message(Command("start"))
@@ -106,6 +110,37 @@ async def handle_chatid(message: Message) -> None:
     await message.answer(f"Chat ID этой беседы: {message.chat.id}")
 
 
+@common_router.message(Command("diag"))
+async def handle_diag(
+    message: Message,
+    settings: BotSettings,
+    servers_config: ServersConfig,
+    topic_access_store: TopicAccessStore,
+) -> None:
+    if not is_admin_user(_get_user_id(message), settings):
+        await message.answer(DIAG_ADMIN_ONLY_MESSAGE)
+        return
+
+    lines = [
+        "🧪 Диагностика бота:",
+        f"servers.yml: {servers_config.source_path}",
+        f"servers.yml exists: {servers_config.source_exists}",
+        f"servers.yml keys: {', '.join(servers_config.source_keys) or 'нет'}",
+        f"command_aliases: {len(servers_config.command_aliases)}",
+        "servers:",
+    ]
+    lines.extend(_format_diag_server_lines(servers_config))
+    lines.extend(
+        [
+            f"topic_access.yml: {topic_access_store.path}",
+            f"topic_access.yml is_file: {topic_access_store.path.is_file()}",
+            f"Python: {platform.python_version()}",
+            f"mcrcon: {_get_package_version('mcrcon')}",
+        ]
+    )
+    await message.answer("\n".join(lines))
+
+
 @common_router.message(Command("status"))
 async def handle_status(
     message: Message,
@@ -142,6 +177,23 @@ async def handle_players(
 
 def _get_user_id(message: Message) -> int | None:
     return message.from_user.id if message.from_user else None
+
+
+def _format_diag_server_lines(servers_config: ServersConfig) -> list[str]:
+    return [
+        "  "
+        f"{server.key}: display_name={server.display_name}, "
+        f"host={mask_host(server.host)}, port={server.port}, "
+        f"password_set={bool(server.password)}"
+        for server in servers_config.servers.values()
+    ]
+
+
+def _get_package_version(package_name: str) -> str:
+    try:
+        return metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        return "not installed"
 
 
 def _has_any_topic_access(message: Message, topic_access_store: TopicAccessStore) -> bool:
