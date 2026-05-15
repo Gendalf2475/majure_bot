@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,8 @@ BOT_COMMAND_DENIAL_DISABLED = "disabled"
 BOT_COMMAND_DENIAL_ADMIN_ONLY = "admin_only"
 BOT_COMMAND_DENIAL_NO_BOT_ACCESS = "no_bot_access"
 
+logger = logging.getLogger(__name__)
+
 
 class TopicAccessStore:
     def __init__(self, path: Path | None = None) -> None:
@@ -25,9 +28,15 @@ class TopicAccessStore:
         self._user_topics = self._load()
 
     def has_access(self, user_id: int, topic_key: str) -> bool:
+        topic_key = _normalize_topic_key(topic_key)
+        if not topic_key:
+            return False
         return topic_key in self._user_topics.get(user_id, set())
 
     def grant_access(self, user_id: int, topic_key: str) -> bool:
+        topic_key = _normalize_topic_key(topic_key)
+        if not topic_key:
+            return False
         topics = self._user_topics.setdefault(user_id, set())
         if topic_key in topics:
             return False
@@ -36,6 +45,9 @@ class TopicAccessStore:
         return True
 
     def revoke_access(self, user_id: int, topic_key: str) -> bool:
+        topic_key = _normalize_topic_key(topic_key)
+        if not topic_key:
+            return False
         topics = self._user_topics.get(user_id)
         if not topics or topic_key not in topics:
             return False
@@ -151,10 +163,19 @@ def get_bot_command_denial_reason(
     bot_commands_config: BotCommandsConfig,
 ) -> str | None:
     command = bot_commands_config.commands[command_key]
+    user_is_superadmin = is_superadmin(user_id, settings)
+    logger.debug(
+        "Access check: command=%s user_id=%s is_superadmin=%s access=%s enabled=%s",
+        command_key,
+        user_id,
+        user_is_superadmin,
+        command.access,
+        command.enabled,
+    )
     if not command.enabled:
         return BOT_COMMAND_DENIAL_DISABLED
     if command.access == BOT_COMMAND_ACCESS_SUPERADMIN:
-        if is_superadmin(user_id, settings):
+        if user_is_superadmin:
             return None
         if has_any_topic_access(user_id, settings, store):
             return BOT_COMMAND_DENIAL_ADMIN_ONLY
@@ -181,6 +202,10 @@ def _parse_user_id(raw_user_id: Any) -> int:
         return int(raw_user_id)
     except (TypeError, ValueError) as error:
         raise ConfigError(f"user_id {raw_user_id} в {ACCESS_FILE_NAME} должен быть целым числом.") from error
+
+
+def _normalize_topic_key(topic_key: str) -> str:
+    return str(topic_key).strip().lower()
 
 
 def _extract_topics(raw_user_data: Any, user_id: int) -> list[Any]:

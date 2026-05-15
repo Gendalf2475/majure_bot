@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.types import Message
 
+from app.config.bot_commands import BotCommandsConfig
 from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
@@ -14,7 +15,7 @@ from app.services.topic_access_service import (
     is_superadmin,
 )
 from app.utils.validation import (
-    SERVICE_COMMANDS,
+    is_service_command,
     parse_alias_command,
     parse_telegram_command,
 )
@@ -35,12 +36,13 @@ async def handle_server_command(
     servers_config: ServersConfig,
     topics_config: TopicsConfig,
     topic_access_store: TopicAccessStore,
+    bot_commands_config: BotCommandsConfig,
 ) -> None:
     # Разбираем Telegram-команду: из "/test list" получаем command="test", arguments="list".
     command, arguments = parse_telegram_command(message.text or "")
 
-    # Служебные команды уже обработаны в common.py.
-    if command in SERVICE_COMMANDS:
+    # Служебные команды обрабатываются отдельными Telegram handler-ами.
+    if is_service_command(command, bot_commands_config):
         return
 
     user_id = message.from_user.id if message.from_user else None

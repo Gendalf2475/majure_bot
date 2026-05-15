@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from app.config.servers import ALIAS_ACCESS_ADMIN, ALIAS_ACCESS_SUPERADMIN, ServersConfig
 from app.config.topics import TopicsConfig
+from app.utils.validation import SERVICE_COMMANDS
 
 
 MAX_TELEGRAM_CHUNK_SIZE = 3500
@@ -61,6 +62,7 @@ def build_command_aliases_text(
         alias
         for alias in servers_config.command_aliases.values()
         if alias.enabled
+        and alias.input not in SERVICE_COMMANDS
         and (
             (include_admin and alias.access == ALIAS_ACCESS_ADMIN)
             or (include_superadmin and alias.access == ALIAS_ACCESS_SUPERADMIN)

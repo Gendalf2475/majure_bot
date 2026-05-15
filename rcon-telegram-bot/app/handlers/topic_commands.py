@@ -32,7 +32,7 @@ NO_TOPIC_MESSAGE = "❌ RCON-команды работают только вну
 UNKNOWN_TOPIC_MESSAGE = "❌ Этот топик не привязан к серверу в topics.yml."
 ADMIN_ONLY_MESSAGE = "⛔ Команда доступна только администраторам."
 NO_BOT_ACCESS_MESSAGE = "⛔ У вас нет доступа к этому боту.\nОбратитесь к администратору."
-BOT_ACCESS_TARGET_MESSAGE = "❌ Нельзя изменить доступ боту."
+USER_ID_MUST_BE_NUMBER_MESSAGE = "❌ user_id должен быть числом."
 
 
 @topic_commands_router.message(Command("cmd"))
@@ -93,10 +93,6 @@ async def _execute_topic_alias_command(
     if topic is None:
         return
 
-    if not can_use_topic(user_id, topic.key, settings, topic_access_store):
-        await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
-        return
-
     if not command_text.strip():
         await message.answer("❌ Укажите алиас команды.\nПример: напишите list в нужном топике")
         return
@@ -107,6 +103,10 @@ async def _execute_topic_alias_command(
     )
     if parsed_command is None:
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
+        return
+
+    if not can_use_topic(user_id, topic.key, settings, topic_access_store):
+        await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
         return
 
     if not parsed_command.alias.enabled:
@@ -247,11 +247,11 @@ async def handle_access_list(
     ):
         return
 
-    if arguments or message.reply_to_message:
+    if arguments:
         if not can_manage_access(sender_user_id, settings):
             await message.answer(ADMIN_ONLY_MESSAGE)
             return
-        target_user_id = _parse_access_view_target(message, arguments)
+        target_user_id = _parse_access_view_target(arguments)
         if isinstance(target_user_id, str):
             await message.answer(target_user_id)
             return
@@ -317,7 +317,7 @@ async def _answer_bot_command_denial(
         return False
     if denial_reason == BOT_COMMAND_DENIAL_DISABLED:
         await message.answer(DISABLED_COMMAND_MESSAGE)
-    elif denial_reason == BOT_COMMAND_DENIAL_ADMIN_ONLY:
+    elif denial_reason == BOT_COMMAND_DENIAL_ADMIN_ONLY or command_key in {"grant", "revoke"}:
         await message.answer(ADMIN_ONLY_MESSAGE)
     else:
         await message.answer(NO_BOT_ACCESS_MESSAGE)
@@ -330,47 +330,52 @@ def _parse_access_change_target(
     command: str,
 ) -> tuple[int, TopicConfig] | str:
     _, arguments = parse_telegram_command(message.text or "")
+    parsed_target = parse_access_target_from_args(arguments, topics_config)
+    if parsed_target is not None:
+        return parsed_target
+
     parts = arguments.split()
-
-    if message.reply_to_message is None:
-        if len(parts) != 2:
-            return _access_usage(command)
-        user_id = _parse_user_id(parts[0])
-        if user_id is None:
-            return _access_usage(command)
-        topic = _get_topic_by_key(parts[1], topics_config)
-        if topic is None:
-            return f"❌ Режим {parts[1]} не найден."
-        return user_id, topic
-
-    if len(parts) != 1:
+    if len(parts) != 2:
         return _access_usage(command)
 
-    user_id = _get_reply_user_id(message)
-    if user_id is None:
-        return _access_usage(command)
-    if _is_reply_to_bot(message):
-        return BOT_ACCESS_TARGET_MESSAGE
-    topic = _get_topic_by_key(parts[0], topics_config)
+    user_id_raw, topic_key_raw = parts
+    if _parse_user_id(user_id_raw) is None:
+        return USER_ID_MUST_BE_NUMBER_MESSAGE
+    if _get_topic_by_key(topic_key_raw, topics_config) is None:
+        return f"❌ Режим {topic_key_raw} не найден."
+    return _access_usage(command)
+
+
+def parse_access_target_from_args(
+    arguments: str,
+    topics_config: TopicsConfig,
+) -> tuple[int, TopicConfig] | None:
+    parts = arguments.split()
+    if len(parts) != 2:
+        return None
+
+    user_id_raw, topic_key_raw = parts
+    try:
+        user_id = int(user_id_raw)
+    except ValueError:
+        return None
+
+    topic = topics_config.topics.get(topic_key_raw.strip().lower())
     if topic is None:
-        return f"❌ Режим {parts[0]} не найден."
+        return None
+
     return user_id, topic
 
 
-def _parse_access_view_target(message: Message, arguments: str) -> int | str | None:
+def _parse_access_view_target(arguments: str) -> int | str:
     parts = arguments.split()
 
-    if message.reply_to_message is None:
-        if len(parts) != 1:
-            return "❌ Неверный формат.\nИспользуйте: /access <user_id>"
-        user_id = _parse_user_id(parts[0])
-        if user_id is None:
-            return "❌ Неверный формат.\nИспользуйте: /access <user_id>"
-        return user_id
-
-    if parts:
-        return "❌ Неверный формат.\nИспользуйте /access ответом на сообщение пользователя."
-    return _get_reply_user_id(message)
+    if len(parts) != 1:
+        return _access_view_usage()
+    user_id = _parse_user_id(parts[0])
+    if user_id is None:
+        return _access_view_usage()
+    return user_id
 
 
 def _get_topic_by_key(topic_key: str, topics_config: TopicsConfig) -> TopicConfig | None:
@@ -384,25 +389,6 @@ def _parse_user_id(raw_user_id: str) -> int | None:
         return None
 
 
-def _parse_user_id_from_text(text: str) -> int | None:
-    parts = text.split()
-    if len(parts) != 1:
-        return None
-    return _parse_user_id(parts[0])
-
-
-def _get_reply_user_id(message: Message) -> int | None:
-    if message.reply_to_message is None or message.reply_to_message.from_user is None:
-        return None
-    return message.reply_to_message.from_user.id
-
-
-def _is_reply_to_bot(message: Message) -> bool:
-    if message.reply_to_message is None or message.reply_to_message.from_user is None:
-        return False
-    return bool(message.reply_to_message.from_user.is_bot)
-
-
 def _get_user_id(message: Message) -> int | None:
     return message.from_user.id if message.from_user else None
 
@@ -411,7 +397,15 @@ def _access_usage(command: str) -> str:
     return (
         "❌ Неверный формат.\n"
         f"Используйте: /{command} <user_id> <topic_key>\n"
-        f"Или ответом на сообщение пользователя: /{command} <topic_key>"
+        f"Пример: /{command} 5344860685 test"
+    )
+
+
+def _access_view_usage() -> str:
+    return (
+        "❌ Неверный формат.\n"
+        "Используйте: /access [user_id]\n"
+        "Пример: /access 5344860685"
     )
 
 

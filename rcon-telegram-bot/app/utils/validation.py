@@ -2,24 +2,27 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from app.config.servers import CommandAlias
 
 
-SERVICE_COMMANDS = {
-    "start",
-    "help",
-    "servers",
-    "status",
-    "players",
-    "chatid",
-    "diag",
-    "ping",
-    "cmd",
-    "grant",
-    "revoke",
-    "access",
-}
+SERVICE_COMMANDS = frozenset(
+    {
+        "start",
+        "help",
+        "servers",
+        "status",
+        "players",
+        "chatid",
+        "diag",
+        "ping",
+        "cmd",
+        "grant",
+        "revoke",
+        "access",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -36,9 +39,23 @@ def parse_telegram_command(text: str) -> tuple[str, str]:
     # Разбираем "/test list" на command="test" и arguments="list".
     # Если Telegram добавит username бота: "/test@MyBot list", username будет отрезан.
     stripped = text.strip()
-    first_part, _, arguments = stripped.partition(" ")
+    if not stripped:
+        return "", ""
+    parts = stripped.split(maxsplit=1)
+    first_part = parts[0]
+    arguments = parts[1] if len(parts) == 2 else ""
     command = first_part.removeprefix("/").split("@", maxsplit=1)[0].lower()
     return command, arguments.strip()
+
+
+def is_service_command(command: str, bot_commands_config: Any | None = None) -> bool:
+    normalized = command.strip().removeprefix("/").split("@", maxsplit=1)[0].lower()
+    if normalized in SERVICE_COMMANDS:
+        return True
+    if bot_commands_config is None:
+        return False
+    commands = getattr(bot_commands_config, "commands", {})
+    return normalized in commands
 
 
 def parse_alias_command(
@@ -52,6 +69,9 @@ def parse_alias_command(
     parts = stripped.split(maxsplit=1)
     input_command = parts[0].lower()
     args = parts[1].strip() if len(parts) == 2 else ""
+
+    if input_command in SERVICE_COMMANDS:
+        return None
 
     alias = command_aliases_by_input.get(input_command)
     if alias is None:

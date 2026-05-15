@@ -26,7 +26,7 @@ BOT_COMMAND_KEYS = (
     "revoke",
     "access",
 )
-SUPERADMIN_ONLY_BOT_COMMANDS = frozenset({"grant", "revoke"})
+SUPERADMIN_ONLY_BOT_COMMANDS = frozenset({"grant", "revoke", "chatid", "ping"})
 
 
 @dataclass(frozen=True)
@@ -126,9 +126,13 @@ def _load_bot_commands(path: Path) -> BotCommandsConfig:
 
 
 def _parse_bot_command(command_key: str, raw_command_data: dict[str, Any]) -> BotCommandConfig:
-    enabled = _parse_enabled(raw_command_data.get("enabled", True), command_key)
-    access = _parse_access(raw_command_data.get("access", BOT_COMMAND_ACCESS_ADMIN), command_key)
-    description = _parse_description(raw_command_data.get("description"), command_key)
+    default_command = DEFAULT_BOT_COMMANDS[command_key]
+    enabled = _parse_enabled(raw_command_data.get("enabled", default_command.enabled), command_key)
+    access = _parse_access(raw_command_data.get("access", default_command.access), command_key)
+    description = _parse_description(
+        raw_command_data.get("description", default_command.description),
+        command_key,
+    )
 
     if command_key in SUPERADMIN_ONLY_BOT_COMMANDS and access != BOT_COMMAND_ACCESS_SUPERADMIN:
         raise ConfigError(f"Команда {command_key} не может иметь access ниже superadmin.")
