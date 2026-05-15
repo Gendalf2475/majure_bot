@@ -26,6 +26,13 @@ class TopicAccessStore:
         project_dir = Path(__file__).resolve().parents[2]
         self.path = path or project_dir / ACCESS_FILE_NAME
         self._user_topics = self._load()
+        logger.info(
+            "Topic access file: %s exists=%s is_file=%s users_count=%s",
+            self.path,
+            self.path.exists(),
+            self.path.is_file(),
+            len(self._user_topics),
+        )
 
     def has_access(self, user_id: int, topic_key: str) -> bool:
         topic_key = _normalize_topic_key(topic_key)
@@ -61,10 +68,11 @@ class TopicAccessStore:
         return sorted(self._user_topics.get(user_id, set()))
 
     def _load(self) -> dict[int, set[str]]:
+        if self.path.exists() and not self.path.is_file():
+            raise ConfigError(f"{self.path.name} должен быть файлом, но сейчас это директория.")
         if not self.path.exists():
+            self._write_empty_file()
             return {}
-        if not self.path.is_file():
-            raise ConfigError(f"{self.path.name} должен быть файлом, а не директорией.")
 
         try:
             raw_data = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}
@@ -104,6 +112,13 @@ class TopicAccessStore:
             yaml.safe_dump(data, allow_unicode=True, sort_keys=True),
             encoding="utf-8",
         )
+        tmp_path.replace(self.path)
+        logger.info("Topic access saved: path=%s users_count=%s", self.path, len(self._user_topics))
+
+    def _write_empty_file(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp_path.write_text("users: {}\n", encoding="utf-8")
         tmp_path.replace(self.path)
 
 

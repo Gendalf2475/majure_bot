@@ -1,0 +1,13 @@
+services:
+  rcon_majure_bot:
+    build: .
+    container_name: rcon_majure_bot
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./servers.yml:/app/servers.yml:ro
+      - ./topics.yml:/app/topics.yml:ro
+      - ./bot_commands.yml:/app/bot_commands.yml:ro
+      - ./topic_access.yml:/app/topic_access.yml

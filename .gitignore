@@ -2,6 +2,12 @@
 .env.*
 *.env
 
+topic_access.yml
+servers.yml
+topics.yml
+bot_commands.yml
+
+rcon-telegram-bot/.env
 rcon-telegram-bot/servers.yml
 rcon-telegram-bot/topics.yml
 rcon-telegram-bot/topic_access.yml

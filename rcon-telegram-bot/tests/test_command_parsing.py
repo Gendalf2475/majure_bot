@@ -337,6 +337,36 @@ class ServerCommandRoutingTest(unittest.IsolatedAsyncioTestCase):
 
 
 class TopicAccessStoreTest(unittest.TestCase):
+    def test_missing_access_file_is_created_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "topic_access.yml"
+
+            store = TopicAccessStore(path)
+
+            self.assertEqual(store.get_user_topics(5344860685), [])
+            self.assertEqual(path.read_text(encoding="utf-8"), "users: {}\n")
+
+    def test_access_path_must_be_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "topic_access.yml"
+            path.mkdir()
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                "topic_access.yml должен быть файлом, но сейчас это директория.",
+            ):
+                TopicAccessStore(path)
+
+    def test_saved_access_survives_store_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "topic_access.yml"
+            store = TopicAccessStore(path)
+
+            self.assertTrue(store.grant_access(5344860685, "test"))
+            reloaded_store = TopicAccessStore(path)
+
+            self.assertTrue(reloaded_store.has_access(5344860685, "test"))
+
     def test_grant_and_revoke_normalize_topic_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")

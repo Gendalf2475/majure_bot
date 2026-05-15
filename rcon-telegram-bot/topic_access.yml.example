@@ -1,5 +1,1 @@
-users:
-  "123456789":
-    topics:
-      - "test"
-      - "polit"
+users: {}

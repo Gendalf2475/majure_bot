@@ -20,6 +20,8 @@ Telegram-бот для управления несколькими Minecraft Pap
 ```text
 rcon-telegram-bot/
   bot.py
+  Dockerfile
+  docker-compose.yml
   app/
     config/
       bot_commands.py
@@ -439,17 +441,29 @@ python bot.py
 
 При старте бот проверит `.env`, `servers.yml`, `topics.yml`, список серверов, обязательные поля серверов, раздел `command_aliases` и `bot_commands.yml`, если он есть. Если конфигурация некорректна, бот напишет понятную ошибку в консоль и не запустится.
 
-При запуске бот пишет безопасную диагностику конфига: путь к `servers.yml`, найденные верхние YAML-ключи, количество алиасов, server key, display_name, замаскированный host, port и `password_set=true/false`. Пароли и Telegram token в логи не выводятся.
+При запуске бот пишет безопасную диагностику конфига: путь к `servers.yml`, найденные верхние YAML-ключи, количество алиасов, путь к `topic_access.yml`, количество пользователей с выданными доступами, server key, display_name, замаскированный host, port и `password_set=true/false`. Пароли и Telegram token в логи не выводятся.
 
 ## 11.1. Docker/deploy
 
 `servers.yml`, `topics.yml`, `topic_access.yml` и `bot_commands.yml` не хранятся в git и игнорируются как локальные файлы. Если Docker-образ собирается только из git-репозитория, реальные YAML-файлы в образ не попадут. Их нужно передать в контейнер отдельно: bind mount, volume или секретом деплоя. Если `bot_commands.yml` не передан, бот использует безопасные дефолты.
 
+Перед первым запуском рядом с `docker-compose.yml` создайте runtime-файл доступов, если его ещё нет:
+
+```bash
+printf 'users: {}\n' > topic_access.yml
+```
+
 Пример bind mount:
 
 ```yaml
 services:
-  rcon-telegram-bot:
+  rcon_majure_bot:
+    build: .
+    container_name: rcon_majure_bot
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
     volumes:
       - ./servers.yml:/app/servers.yml:ro
       - ./topics.yml:/app/topics.yml:ro
@@ -458,6 +472,7 @@ services:
 ```
 
 Строку с `bot_commands.yml` добавляйте только если создали локальный файл. Без него бот использует дефолтные настройки служебных команд.
+`topic_access.yml` монтируется без `:ro`: это state-файл, и бот сохраняет в него `/grant` и `/revoke` сразу после изменения доступа.
 
 Путь справа должен совпадать с `WORKDIR` контейнера. Если `WORKDIR` не `/app`, укажите путь к `servers.yml` рядом с `bot.py`.
 
