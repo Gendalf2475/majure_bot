@@ -363,9 +363,23 @@ class TopicAccessStoreTest(unittest.TestCase):
             store = TopicAccessStore(path)
 
             self.assertTrue(store.grant_access(5344860685, "test"))
+            self.assertEqual(
+                path.read_text(encoding="utf-8"),
+                "users:\n"
+                "  '5344860685':\n"
+                "    topics:\n"
+                "    - test\n",
+            )
+            self.assertEqual(store.users_count(), 1)
+            self.assertEqual(store.file_users_count(), 1)
             reloaded_store = TopicAccessStore(path)
 
             self.assertTrue(reloaded_store.has_access(5344860685, "test"))
+
+            self.assertTrue(reloaded_store.revoke_access(5344860685, "test"))
+            self.assertEqual(path.read_text(encoding="utf-8"), "users: {}\n")
+            self.assertEqual(reloaded_store.users_count(), 0)
+            self.assertEqual(reloaded_store.file_users_count(), 0)
 
     def test_grant_and_revoke_normalize_topic_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

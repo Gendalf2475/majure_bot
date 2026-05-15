@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ class TopicAccessStore:
         self.path = path or project_dir / ACCESS_FILE_NAME
         self._user_topics = self._load()
         logger.info(
-            "Topic access file: %s exists=%s is_file=%s users_count=%s",
+            "TopicAccessStore path=%s exists=%s is_file=%s users_count=%s",
             self.path,
             self.path.exists(),
             self.path.is_file(),
@@ -48,7 +49,20 @@ class TopicAccessStore:
         if topic_key in topics:
             return False
         topics.add(topic_key)
-        self._save()
+        try:
+            self._save()
+        except Exception:
+            topics.remove(topic_key)
+            if not topics:
+                self._user_topics.pop(user_id, None)
+            raise
+        logger.info(
+            "Topic access saved after grant: path=%s user_id=%s topic=%s users_count=%s",
+            self.path,
+            user_id,
+            topic_key,
+            len(self._user_topics),
+        )
         return True
 
     def revoke_access(self, user_id: int, topic_key: str) -> bool:
@@ -59,13 +73,46 @@ class TopicAccessStore:
         if not topics or topic_key not in topics:
             return False
         topics.remove(topic_key)
+        removed_user = False
         if not topics:
             self._user_topics.pop(user_id, None)
-        self._save()
+            removed_user = True
+        try:
+            self._save()
+        except Exception:
+            if removed_user:
+                self._user_topics[user_id] = {topic_key}
+            else:
+                topics.add(topic_key)
+            raise
+        logger.info(
+            "Topic access saved after revoke: path=%s user_id=%s topic=%s users_count=%s",
+            self.path,
+            user_id,
+            topic_key,
+            len(self._user_topics),
+        )
         return True
 
     def get_user_topics(self, user_id: int) -> list[str]:
         return sorted(self._user_topics.get(user_id, set()))
+
+    def users_count(self) -> int:
+        return len(self._user_topics)
+
+    def file_users_count(self) -> int:
+        if not self.path.exists() or not self.path.is_file():
+            return 0
+        raw_data = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw_data, dict):
+            return 0
+        raw_users = raw_data.get("users", {})
+        return len(raw_users) if isinstance(raw_users, dict) else 0
+
+    def read_raw_file(self) -> str:
+        if not self.path.exists() or not self.path.is_file():
+            return ""
+        return self.path.read_text(encoding="utf-8").strip()
 
     def _load(self) -> dict[int, set[str]]:
         if self.path.exists() and not self.path.is_file():
@@ -101,25 +148,48 @@ class TopicAccessStore:
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {
+        data = self._build_yaml_data()
+        serialized_data = yaml.safe_dump(data, allow_unicode=True, sort_keys=True)
+        logger.info("Saving topic access: path=%s data=%s", self.path, data)
+        try:
+            with self.path.open("w", encoding="utf-8") as access_file:
+                access_file.write(serialized_data)
+                access_file.flush()
+                os.fsync(access_file.fileno())
+        except OSError as error:
+            raise RuntimeError(f"Не удалось сохранить {self.path.name}: {error}") from error
+
+        try:
+            saved_text = self.path.read_text(encoding="utf-8")
+            saved_data = yaml.safe_load(saved_text) or {}
+        except (OSError, yaml.YAMLError) as error:
+            raise RuntimeError(f"Не удалось проверить сохранение {self.path.name}: {error}") from error
+
+        if saved_data != data:
+            raise RuntimeError(
+                f"После сохранения {self.path.name} содержимое файла не совпадает с памятью."
+            )
+        logger.info(
+            "Topic access saved: path=%s bytes=%s users_count=%s",
+            self.path,
+            len(saved_text.encode("utf-8")),
+            len(self._user_topics),
+        )
+
+    def _build_yaml_data(self) -> dict[str, dict[str, dict[str, list[str]]]]:
+        return {
             "users": {
                 str(user_id): {"topics": sorted(topics)}
                 for user_id, topics in sorted(self._user_topics.items())
             }
         }
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(
-            yaml.safe_dump(data, allow_unicode=True, sort_keys=True),
-            encoding="utf-8",
-        )
-        tmp_path.replace(self.path)
-        logger.info("Topic access saved: path=%s users_count=%s", self.path, len(self._user_topics))
 
     def _write_empty_file(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text("users: {}\n", encoding="utf-8")
-        tmp_path.replace(self.path)
+        with self.path.open("w", encoding="utf-8") as access_file:
+            access_file.write("users: {}\n")
+            access_file.flush()
+            os.fsync(access_file.fileno())
 
 
 def is_admin_user(user_id: int | None, settings: BotSettings) -> bool:

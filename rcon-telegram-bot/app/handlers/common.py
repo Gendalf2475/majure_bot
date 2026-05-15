@@ -202,8 +202,13 @@ async def handle_diag(
     lines.extend(_format_diag_server_lines(servers_config))
     lines.extend(
         [
-            f"topic_access.yml: {topic_access_store.path}",
-            f"topic_access.yml is_file: {topic_access_store.path.is_file()}",
+            f"TopicAccessStore.path: {topic_access_store.path}",
+            f"TopicAccessStore exists: {topic_access_store.path.exists()}",
+            f"TopicAccessStore is_file: {topic_access_store.path.is_file()}",
+            f"TopicAccessStore users_count memory: {topic_access_store.users_count()}",
+            f"TopicAccessStore users_count file: {topic_access_store.file_users_count()}",
+            "topic_access.yml raw:",
+            topic_access_store.read_raw_file() or "пусто",
             f"Python: {platform.python_version()}",
             f"mcrcon: {_get_package_version('mcrcon')}",
         ]
