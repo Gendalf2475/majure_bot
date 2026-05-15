@@ -176,7 +176,7 @@ class AccessCommandHandlerTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message.answers, [ADMIN_ONLY_MESSAGE])
             self.assertFalse(store.has_access(5344860685, "test"))
 
-    async def test_grant_uses_strict_two_argument_format(self) -> None:
+    async def test_grant_notifies_current_chat_when_access_is_new(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             message = _AnsweringMessage("/grant 5344860685 test", from_user_id=1)
             store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
@@ -189,10 +189,32 @@ class AccessCommandHandlerTest(unittest.IsolatedAsyncioTestCase):
                 bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
             )
 
-            self.assertEqual(message.answers, ["✅ Доступ к Test выдан пользователю 5344860685."])
+            self.assertEqual(
+                message.answers,
+                ["✅ Пользователю 5344860685 выдан доступ к режиму Test."],
+            )
             self.assertTrue(store.has_access(5344860685, "test"))
 
-    async def test_revoke_uses_strict_two_argument_format(self) -> None:
+    async def test_grant_notifies_current_chat_when_access_already_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/grant 5344860685 test", from_user_id=1)
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+            store.grant_access(5344860685, "test")
+
+            await handle_grant_access(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                topics_config=_topics_config(),
+                topic_access_store=store,
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(
+                message.answers,
+                ["✅ У пользователя 5344860685 уже есть доступ к режиму Test."],
+            )
+
+    async def test_revoke_notifies_current_chat_when_access_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             message = _AnsweringMessage("/revoke 5344860685 test", from_user_id=1)
             store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
@@ -206,8 +228,29 @@ class AccessCommandHandlerTest(unittest.IsolatedAsyncioTestCase):
                 bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
             )
 
-            self.assertEqual(message.answers, ["✅ Доступ к Test отозван у пользователя 5344860685."])
+            self.assertEqual(
+                message.answers,
+                ["✅ У пользователя 5344860685 отозван доступ к режиму Test."],
+            )
             self.assertFalse(store.has_access(5344860685, "test"))
+
+    async def test_revoke_notifies_current_chat_when_access_did_not_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/revoke 5344860685 test", from_user_id=1)
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+
+            await handle_revoke_access(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                topics_config=_topics_config(),
+                topic_access_store=store,
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(
+                message.answers,
+                ["ℹ️ У пользователя 5344860685 не было доступа к режиму Test."],
+            )
 
     async def test_access_target_user_shows_topic_keys_for_superadmin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

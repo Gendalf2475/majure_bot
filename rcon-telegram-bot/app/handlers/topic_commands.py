@@ -190,9 +190,9 @@ async def handle_grant_access(
     user_id, topic = target
     changed = topic_access_store.grant_access(user_id, topic.key)
     if changed:
-        await message.answer(f"✅ Доступ к {topic.display_name} выдан пользователю {user_id}.")
+        await message.answer(f"✅ Пользователю {user_id} выдан доступ к режиму {topic.display_name}.")
         return
-    await message.answer(f"✅ У пользователя {user_id} уже есть доступ к {topic.display_name}.")
+    await message.answer(f"✅ У пользователя {user_id} уже есть доступ к режиму {topic.display_name}.")
 
 
 @topic_commands_router.message(Command("revoke"))
@@ -222,9 +222,9 @@ async def handle_revoke_access(
     user_id, topic = target
     changed = topic_access_store.revoke_access(user_id, topic.key)
     if changed:
-        await message.answer(f"✅ Доступ к {topic.display_name} отозван у пользователя {user_id}.")
+        await message.answer(f"✅ У пользователя {user_id} отозван доступ к режиму {topic.display_name}.")
         return
-    await message.answer(f"✅ У пользователя {user_id} не было доступа к {topic.display_name}.")
+    await message.answer(f"ℹ️ У пользователя {user_id} не было доступа к режиму {topic.display_name}.")
 
 
 @topic_commands_router.message(Command("access"))
