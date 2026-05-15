@@ -397,7 +397,7 @@ def _access_usage(command: str) -> str:
     return (
         "❌ Неверный формат.\n"
         f"Используйте: /{command} <user_id> <topic_key>\n"
-        f"Пример: /{command} 5344860665 test"
+        f"Пример: /{command} 5344860685 test"
     )
 
 

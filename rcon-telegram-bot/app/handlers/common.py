@@ -27,7 +27,7 @@ from app.services.topic_access_service import (
     get_user_topic_keys,
     is_superadmin,
 )
-from app.utils.text import build_command_aliases_text, send_long_message
+from app.utils.text import build_server_commands_text, send_long_message
 
 
 common_router = Router()
@@ -98,23 +98,22 @@ async def handle_help(
         return
 
     superadmin = is_superadmin(user_id, settings)
-    topics = _get_visible_topics(user_id, settings, topic_access_store, topics_config)
     servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
     bot_commands_text = _build_bot_command_lines(
         bot_commands_config,
         include_admin=True,
         include_superadmin=superadmin,
     )
-    command_aliases_text = build_command_aliases_text(
+    server_commands_text = build_server_commands_text(
         servers_config,
         include_admin=True,
         include_superadmin=superadmin,
     )
 
     if superadmin:
-        text = _build_superadmin_help(bot_commands_text, topics, servers, command_aliases_text)
+        text = _build_superadmin_help(bot_commands_text, servers, server_commands_text)
     else:
-        text = _build_user_help(bot_commands_text, servers, command_aliases_text)
+        text = _build_user_help(bot_commands_text, servers, server_commands_text)
     await message.answer(text)
 
 
@@ -305,7 +304,7 @@ async def _answer_bot_command_denial(
 def _build_user_help(
     bot_commands_text: str,
     servers: list[ServerConfig],
-    command_aliases_text: str,
+    server_commands_text: str,
 ) -> str:
     return (
         "🛠 Доступные команды:\n\n"
@@ -313,19 +312,15 @@ def _build_user_help(
         f"{bot_commands_text}\n\n"
         "Серверы:\n"
         f"{_format_server_command_lines(servers)}\n\n"
-        "Алиасы:\n"
-        f"{command_aliases_text}\n\n"
-        "Подсказка:\n"
-        "Пишите алиас обычным сообщением в нужном топике.\n"
-        "Пример: list"
+        "Серверные команды:\n"
+        f"{server_commands_text}"
     )
 
 
 def _build_superadmin_help(
     bot_commands_text: str,
-    topics: list[TopicConfig],
     servers: list[ServerConfig],
-    command_aliases_text: str,
+    server_commands_text: str,
 ) -> str:
     return (
         "🛠 Команды администратора:\n\n"
@@ -333,10 +328,8 @@ def _build_superadmin_help(
         f"{bot_commands_text}\n\n"
         "Серверы:\n"
         f"{_format_server_command_lines(servers)}\n\n"
-        "Топики:\n"
-        f"{_format_topic_lines(topics, show_keys=True)}\n\n"
-        "Алиасы:\n"
-        f"{command_aliases_text}"
+        "Серверные команды:\n"
+        f"{server_commands_text}"
     )
 
 
@@ -440,7 +433,7 @@ def _format_server_command_lines(servers: list[ServerConfig]) -> str:
     if not servers:
         return "нет доступных серверов"
     return "\n".join(
-        f"• /{server.telegram_command} <alias> — {server.display_name}"
+        f"• /{server.telegram_command} — {server.display_name}"
         for server in servers
     )
 

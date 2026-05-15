@@ -6,9 +6,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.config.bot_commands import BOT_COMMAND_ACCESS_SUPERADMIN, load_bot_commands_config
-from app.config.servers import ALIAS_ACCESS_ADMIN, CommandAlias
+from app.config.servers import (
+    ALIAS_ACCESS_ADMIN,
+    ALIAS_ACCESS_SUPERADMIN,
+    CommandAlias,
+    ServerConfig,
+    ServersConfig,
+)
 from app.config.settings import BotSettings, ConfigError
 from app.config.topics import TopicConfig, TopicsConfig
+from app.handlers.common import NO_BOT_ACCESS_MESSAGE, handle_help
 from app.handlers.server_commands import handle_server_command
 from app.handlers.topic_commands import (
     ADMIN_ONLY_MESSAGE,
@@ -294,6 +301,81 @@ class AccessCommandHandlerTest(unittest.IsolatedAsyncioTestCase):
             )
 
 
+class HelpCommandTest(unittest.IsolatedAsyncioTestCase):
+    async def test_superadmin_help_has_servers_and_server_commands_without_topics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/help", from_user_id=1)
+
+            await handle_help(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("🛠 Команды администратора:", text)
+            self.assertIn("Служебные:\n• /start — Информация о боте", text)
+            self.assertIn("• /ping — Проверить работу бота", text)
+            self.assertIn("• /grant <user_id> <topic_key> — Выдать доступ к режиму", text)
+            self.assertIn("Серверы:\n• /test — Test\n• /polit — Polit", text)
+            self.assertIn("Серверные команды:\n• ban — Забанить игрока", text)
+            self.assertIn("• root — Суперадминская команда", text)
+            self.assertNotIn("Топики:", text)
+            self.assertNotIn("<alias>", text)
+            self.assertNotIn("disabled", text)
+            self.assertNotIn("Алиасы:", text)
+
+    async def test_admin_help_shows_only_accessible_servers_and_admin_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/help", from_user_id=2)
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+            store.grant_access(2, "test")
+
+            await handle_help(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=store,
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("🛠 Доступные команды:", text)
+            self.assertIn("Серверы:\n• /test — Test", text)
+            self.assertIn("Серверные команды:\n• ban — Забанить игрока", text)
+            self.assertIn("• /access — Показать выданные доступы", text)
+            self.assertNotIn("• /polit — Polit", text)
+            self.assertNotIn("/grant", text)
+            self.assertNotIn("/revoke", text)
+            self.assertNotIn("/chatid", text)
+            self.assertNotIn("/ping", text)
+            self.assertNotIn("root", text)
+            self.assertNotIn("Топики:", text)
+            self.assertNotIn("<alias>", text)
+            self.assertNotIn("Алиасы:", text)
+
+    async def test_help_without_access_is_denied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/help", from_user_id=3)
+
+            await handle_help(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(message.answers, [NO_BOT_ACCESS_MESSAGE])
+
+
 def _settings(*, admin_ids: frozenset[int]) -> BotSettings:
     return BotSettings(
         telegram_bot_token="token",
@@ -316,6 +398,92 @@ def _topics_config() -> TopicsConfig:
         topics={"test": topic},
         topics_by_thread_id={1: topic},
         topics_by_server_key={"test": topic},
+    )
+
+
+def _multi_topics_config() -> TopicsConfig:
+    test_topic = TopicConfig(
+        key="test",
+        display_name="Test",
+        server_key="test",
+        thread_id=1,
+    )
+    polit_topic = TopicConfig(
+        key="polit",
+        display_name="Polit",
+        server_key="polit",
+        thread_id=2,
+    )
+    return TopicsConfig(
+        topics={"test": test_topic, "polit": polit_topic},
+        topics_by_thread_id={1: test_topic, 2: polit_topic},
+        topics_by_server_key={"test": test_topic, "polit": polit_topic},
+    )
+
+
+def _servers_config() -> ServersConfig:
+    test_server = ServerConfig(
+        key="test",
+        display_name="Test",
+        host="127.0.0.1",
+        port=25575,
+        password="password",
+        telegram_command="test",
+    )
+    polit_server = ServerConfig(
+        key="polit",
+        display_name="Polit",
+        host="127.0.0.1",
+        port=25576,
+        password="password",
+        telegram_command="polit",
+    )
+    ban_alias = CommandAlias(
+        key="ban",
+        input="ban",
+        execute="ban {args}",
+        show_response=True,
+        success_message=None,
+        enabled=True,
+        access=ALIAS_ACCESS_ADMIN,
+        description="Забанить игрока",
+    )
+    root_alias = CommandAlias(
+        key="root",
+        input="root",
+        execute="op {args}",
+        show_response=True,
+        success_message=None,
+        enabled=True,
+        access=ALIAS_ACCESS_SUPERADMIN,
+        description="Суперадминская команда",
+    )
+    disabled_alias = CommandAlias(
+        key="disabled",
+        input="disabled",
+        execute="say disabled",
+        show_response=True,
+        success_message=None,
+        enabled=False,
+        access=ALIAS_ACCESS_ADMIN,
+        description="Отключённая команда",
+    )
+    return ServersConfig(
+        servers={"test": test_server, "polit": polit_server},
+        servers_by_command={"test": test_server, "polit": polit_server},
+        command_aliases={
+            "ban": ban_alias,
+            "root": root_alias,
+            "disabled": disabled_alias,
+        },
+        command_aliases_by_input={
+            "ban": ban_alias,
+            "root": root_alias,
+            "disabled": disabled_alias,
+        },
+        source_path=Path("servers.yml"),
+        source_exists=True,
+        source_keys=("servers", "command_aliases"),
     )
 
 

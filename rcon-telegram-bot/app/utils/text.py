@@ -38,7 +38,7 @@ def build_server_lines(servers_config: ServersConfig) -> str:
 def build_server_command_lines(servers_config: ServersConfig) -> str:
     # Формат списка серверных команд для /help.
     return "\n".join(
-        f"/{server.telegram_command} <alias> [аргументы] — {server.display_name}"
+        f"• /{server.telegram_command} — {server.display_name}"
         for server in servers_config.servers.values()
     )
 
@@ -52,7 +52,7 @@ def build_topic_lines(topics_config: TopicsConfig) -> str:
     )
 
 
-def build_command_aliases_text(
+def build_server_commands_text(
     servers_config: ServersConfig,
     *,
     include_admin: bool,
