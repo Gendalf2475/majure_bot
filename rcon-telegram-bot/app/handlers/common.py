@@ -63,8 +63,20 @@ async def handle_start(
         return
 
     superadmin = is_superadmin(user_id, settings)
-    topics = _get_visible_topics(user_id, settings, topic_access_store, topics_config)
-    servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    topics = _get_visible_topics(
+        user_id,
+        settings,
+        topic_access_store,
+        topics_config,
+        servers_config,
+    )
+    servers = _get_visible_servers(
+        user_id,
+        settings,
+        topic_access_store,
+        servers_config,
+        topics_config,
+    )
     text = (
         "👋 Это RCON-бот для управления Minecraft Paper-серверами.\n\n"
         "Доступные режимы:\n"
@@ -98,7 +110,13 @@ async def handle_help(
         return
 
     superadmin = is_superadmin(user_id, settings)
-    servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    servers = _get_visible_servers(
+        user_id,
+        settings,
+        topic_access_store,
+        servers_config,
+        topics_config,
+    )
     bot_commands_text = _build_bot_command_lines(
         bot_commands_config,
         include_admin=True,
@@ -137,7 +155,13 @@ async def handle_servers(
     ):
         return
 
-    servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    servers = _get_visible_servers(
+        user_id,
+        settings,
+        topic_access_store,
+        servers_config,
+        topics_config,
+    )
     await message.answer(f"Доступные серверы:\n{_format_server_lines(servers)}")
 
 
@@ -235,7 +259,13 @@ async def handle_status(
     ):
         return
 
-    servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    servers = _get_visible_servers(
+        user_id,
+        settings,
+        topic_access_store,
+        servers_config,
+        topics_config,
+    )
     lines = ["📡 Статус серверов:"]
     results = await asyncio.gather(
         *(get_server_status_line(server, settings) for server in servers)
@@ -264,7 +294,13 @@ async def handle_players(
     ):
         return
 
-    servers = _get_visible_servers(user_id, settings, topic_access_store, servers_config, topics_config)
+    servers = _get_visible_servers(
+        user_id,
+        settings,
+        topic_access_store,
+        servers_config,
+        topics_config,
+    )
     results = await asyncio.gather(
         *(get_server_players_block(server, settings) for server in servers)
     )
@@ -338,7 +374,7 @@ def _format_diag_server_lines(servers_config: ServersConfig) -> list[str]:
         "  "
         f"{server.key}: display_name={server.display_name}, "
         f"host={mask_host(server.host)}, port={server.port}, "
-        f"password_set={bool(server.password)}"
+        f"password_set={bool(server.password)}, hidden={server.hidden}"
         for server in servers_config.servers.values()
     ]
 
@@ -381,14 +417,22 @@ def _get_visible_topics(
     settings: BotSettings,
     topic_access_store: TopicAccessStore,
     topics_config: TopicsConfig,
+    servers_config: ServersConfig,
 ) -> list[TopicConfig]:
     if is_superadmin(user_id, settings):
-        return list(topics_config.topics.values())
+        return [
+            topic
+            for topic in topics_config.topics.values()
+            if not servers_config.servers[topic.server_key].hidden
+        ]
     topic_keys = set(get_user_topic_keys(user_id, topic_access_store))
     return [
         topic
         for topic in topics_config.topics.values()
-        if topic.key in topic_keys
+        if (
+            topic.key in topic_keys
+            and not servers_config.servers[topic.server_key].hidden
+        )
     ]
 
 
@@ -400,15 +444,21 @@ def _get_visible_servers(
     topics_config: TopicsConfig,
 ) -> list[ServerConfig]:
     if is_superadmin(user_id, settings):
-        return list(servers_config.servers.values())
+        return [server for server in servers_config.servers.values() if not server.hidden]
     server_keys = {
         topic.server_key
-        for topic in _get_visible_topics(user_id, settings, topic_access_store, topics_config)
+        for topic in _get_visible_topics(
+            user_id,
+            settings,
+            topic_access_store,
+            topics_config,
+            servers_config,
+        )
     }
     return [
         server
         for server in servers_config.servers.values()
-        if server.key in server_keys
+        if server.key in server_keys and not server.hidden
     ]
 
 

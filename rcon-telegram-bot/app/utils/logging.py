@@ -34,12 +34,13 @@ def log_startup(logger: logging.Logger, settings: BotSettings, servers_config: S
     )
     for server in servers_config.servers.values():
         logger.info(
-            "server config loaded: key=%s display_name=%s host=%s port=%s password_set=%s",
+            "server config loaded: key=%s display_name=%s host=%s port=%s password_set=%s hidden=%s",
             server.key,
             server.display_name,
             mask_host(server.host),
             server.port,
             bool(server.password),
+            server.hidden,
         )
         if _is_template_password(server.password):
             logger.warning(

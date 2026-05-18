@@ -263,6 +263,7 @@ servers:
     port: 25576
     password: "CHANGE_ME"
     telegram_command: "test"
+    hidden: false
 
   polit:
     display_name: "Полит"
@@ -270,6 +271,15 @@ servers:
     port: 25577
     password: "CHANGE_ME"
     telegram_command: "polit"
+    hidden: false
+
+  hidden_proxy:
+    display_name: "Hidden Proxy"
+    host: "127.0.0.1"
+    port: 25578
+    password: "CHANGE_ME"
+    telegram_command: "hidden_proxy"
+    hidden: true
 
 command_aliases:
   ban:
@@ -304,6 +314,16 @@ command_aliases:
     access: "admin"
     description: "Отправить сообщение в чат сервера"
 
+  sync:
+    input: "sync"
+    execute: "say Sync {args}"
+    show_response: false
+    success_message: "✅ Sync выполнен."
+    enabled: true
+    access: "admin"
+    target_server: "hidden_proxy"
+    description: "Выполнить sync на скрытом сервере"
+
   clearmoder:
     input: "clearmoder"
     execute:
@@ -327,6 +347,8 @@ command_aliases:
 
 `command_aliases` — это безопасная карта команд. Пользователь пишет `input` в Telegram, бот берёт всё после `input` как `{args}` и отправляет в RCON только команду, собранную из `execute`.
 
+У сервера можно указать `hidden: true`. Такой сервер остаётся доступным для RCON и `target_server`, но не показывается в `/help`, `/servers`, `/status`, `/players` и списке доступных режимов. Поле необязательное, по умолчанию `hidden: false`; значение должно быть `true` или `false`.
+
 Поля алиаса:
 
 - `input` — что пишет человек в Telegram. Значение приводится к lowercase, не должно начинаться с `/` и не должно содержать пробелы.
@@ -336,12 +358,13 @@ command_aliases:
 - `success_message` — необязательный текст успешного выполнения для `show_response: false`. Если он пустой или не указан, бот отправит стандартное `✅ Команда выполнена на <server.display_name>.`
 - `enabled` — включает или отключает алиас. По умолчанию `true`. Отключённые алиасы не видны в `/help` и не выполняются.
 - `access` — `admin` для пользователей с доступом к режиму и суперадминов, `superadmin` только для `ADMIN_IDS`. По умолчанию `admin`.
+- `target_server` — необязательный ключ сервера из `servers.yml`. Если указан, алиас всегда выполняется на этом сервере, даже когда команда вызвана из другого топика или через `/test <alias>`. Доступ всё равно проверяется по текущему топику или выбранной серверной команде.
 - `description` — текст для `/help`. Если пустой, в `/help` показывается только `input`.
 
 В `/help` бот показывает только `input` и `description`, без RCON-шаблонов:
 
 ```text
-Алиасы:
+Серверные команды:
 • ban — Забанить игрока
 • list — Список игроков на сервере
 ```
@@ -352,6 +375,7 @@ command_aliases:
 
 - Пользователь пишет `ban Gendalf2475 7d Читы`, `execute: "ban {args}"` превращается в `ban Gendalf2475 7d Читы`.
 - Пользователь пишет `srestart test test`, `execute: "uar now 300"` не содержит `{args}`, поэтому в RCON уходит только `uar now 300`.
+- Пользователь пишет `sync Gendalf2475` в доступном ему топике, а алиас с `target_server: "hidden_proxy"` выполняет команду на сервере `hidden_proxy`.
 
 Держите набор алиасов минимальным. Бот не отправляет пользовательский текст в RCON напрямую: команда всегда собирается из `execute`.
 
@@ -441,7 +465,7 @@ python bot.py
 
 При старте бот проверит `.env`, `servers.yml`, `topics.yml`, список серверов, обязательные поля серверов, раздел `command_aliases` и `bot_commands.yml`, если он есть. Если конфигурация некорректна, бот напишет понятную ошибку в консоль и не запустится.
 
-При запуске бот пишет безопасную диагностику конфига: путь к `servers.yml`, найденные верхние YAML-ключи, количество алиасов, путь к `topic_access.yml`, количество пользователей с выданными доступами, server key, display_name, замаскированный host, port и `password_set=true/false`. Пароли и Telegram token в логи не выводятся.
+При запуске бот пишет безопасную диагностику конфига: путь к `servers.yml`, найденные верхние YAML-ключи, количество алиасов, путь к `topic_access.yml`, количество пользователей с выданными доступами, server key, display_name, замаскированный host, port, `password_set=true/false` и `hidden=true/false`. Пароли и Telegram token в логи не выводятся.
 
 ## 11.1. Docker/deploy
 
@@ -530,6 +554,7 @@ list
 - Алиас команды не добавлен в `command_aliases`.
 - Алиас отключён через `enabled: false`.
 - Для алиаса указан `access: superadmin`, а пользователя нет в `ADMIN_IDS`.
+- В `target_server` указан ключ сервера, которого нет в `servers.yml`.
 - Служебная команда отключена в `bot_commands.yml`.
 - `ALLOWED_CHAT_ID` не настроен или указан неверно.
 - `ADMIN_IDS` не содержит user_id суперадмина.

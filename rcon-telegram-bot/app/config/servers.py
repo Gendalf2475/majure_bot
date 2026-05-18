@@ -22,6 +22,7 @@ class ServerConfig:
     port: int
     password: str
     telegram_command: str
+    hidden: bool = False
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class CommandAlias:
     enabled: bool
     access: str
     description: str
+    target_server: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,10 +79,6 @@ def _load_servers(path: Path) -> ServersConfig:
     if not isinstance(raw_servers, dict) or not raw_servers:
         raise ConfigError("В servers.yml должен быть хотя бы один сервер.")
 
-    command_aliases, command_aliases_by_input = _parse_command_aliases(
-        raw_data["command_aliases"]
-    )
-
     servers: dict[str, ServerConfig] = {}
     servers_by_command: dict[str, ServerConfig] = {}
 
@@ -98,6 +96,7 @@ def _load_servers(path: Path) -> ServersConfig:
             key,
         )
         port = _parse_port(server_data.get("port"), key)
+        hidden = _parse_hidden(server_data.get("hidden", False), key)
 
         server = ServerConfig(
             key=key,
@@ -106,6 +105,7 @@ def _load_servers(path: Path) -> ServersConfig:
             port=port,
             password=password,
             telegram_command=telegram_command,
+            hidden=hidden,
         )
         servers[key] = server
 
@@ -118,6 +118,11 @@ def _load_servers(path: Path) -> ServersConfig:
                 f"{other_server.key} и {server.key}."
             )
         servers_by_command[telegram_command] = server
+
+    command_aliases, command_aliases_by_input = _parse_command_aliases(
+        raw_data["command_aliases"],
+        set(servers),
+    )
 
     return ServersConfig(
         servers=servers,
@@ -152,6 +157,12 @@ def _parse_port(value: Any, server_key: str) -> int:
     return port
 
 
+def _parse_hidden(value: Any, server_key: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"hidden сервера {server_key} должен быть bool.")
+    return value
+
+
 def _normalize_telegram_command(command: str, server_key: str) -> str:
     # В YAML можно написать "test" или "/test"; внутри проекта храним без слэша.
     normalized = command.strip().lower().lstrip("/")
@@ -164,6 +175,7 @@ def _normalize_telegram_command(command: str, server_key: str) -> str:
 
 def _parse_command_aliases(
     raw_command_aliases: Any,
+    server_keys: set[str],
 ) -> tuple[dict[str, CommandAlias], dict[str, CommandAlias]]:
     if not isinstance(raw_command_aliases, dict):
         raise ConfigError("Раздел command_aliases должен быть YAML-словарем.")
@@ -188,6 +200,11 @@ def _parse_command_aliases(
         enabled = _parse_alias_enabled(alias_data.get("enabled", True), key)
         access = _parse_alias_access(alias_data.get("access", ALIAS_ACCESS_ADMIN), key)
         description = _parse_alias_description(alias_data.get("description"), key)
+        target_server = _parse_alias_target_server(
+            alias_data.get("target_server"),
+            key,
+            server_keys,
+        )
 
         alias = CommandAlias(
             key=key,
@@ -198,6 +215,7 @@ def _parse_command_aliases(
             enabled=enabled,
             access=access,
             description=description,
+            target_server=target_server,
         )
 
         if input_command in command_aliases_by_input:
@@ -312,3 +330,18 @@ def _parse_alias_description(value: Any, alias_key: str) -> str:
     if not isinstance(value, str):
         raise ConfigError(f"description алиаса команды {alias_key} должен быть строкой.")
     return value.strip()
+
+
+def _parse_alias_target_server(
+    value: Any,
+    alias_key: str,
+    server_keys: set[str],
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"target_server алиаса команды {alias_key} должен быть строкой.")
+    target_server = value.strip().lower()
+    if target_server not in server_keys:
+        raise ConfigError(f"Alias {alias_key} references unknown target_server {target_server}.")
+    return target_server

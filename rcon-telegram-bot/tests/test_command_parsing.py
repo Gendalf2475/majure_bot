@@ -12,10 +12,11 @@ from app.config.servers import (
     CommandAlias,
     ServerConfig,
     ServersConfig,
+    load_servers_config,
 )
 from app.config.settings import BotSettings, ConfigError
 from app.config.topics import TopicConfig, TopicsConfig
-from app.handlers.common import NO_BOT_ACCESS_MESSAGE, handle_help
+from app.handlers.common import NO_BOT_ACCESS_MESSAGE, handle_help, handle_servers, handle_start
 from app.handlers.server_commands import handle_server_command
 from app.handlers.topic_commands import (
     ADMIN_ONLY_MESSAGE,
@@ -25,6 +26,7 @@ from app.handlers.topic_commands import (
     handle_access_list,
     handle_grant_access,
     handle_revoke_access,
+    handle_topic_text_command,
     parse_access_target_from_args,
 )
 from app.services.topic_access_service import TopicAccessStore
@@ -323,7 +325,10 @@ class HelpCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("• /grant <user_id> <topic_key> — Выдать доступ к режиму", text)
             self.assertIn("Серверы:\n• /test — Test\n• /polit — Polit", text)
             self.assertIn("Серверные команды:\n• ban — Забанить игрока", text)
+            self.assertIn("• sync — Выполнить sync", text)
             self.assertIn("• root — Суперадминская команда", text)
+            self.assertNotIn("hidden_proxy", text)
+            self.assertNotIn("Hidden Proxy", text)
             self.assertNotIn("Топики:", text)
             self.assertNotIn("<alias>", text)
             self.assertNotIn("disabled", text)
@@ -349,8 +354,11 @@ class HelpCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("🛠 Доступные команды:", text)
             self.assertIn("Серверы:\n• /test — Test", text)
             self.assertIn("Серверные команды:\n• ban — Забанить игрока", text)
+            self.assertIn("• sync — Выполнить sync", text)
             self.assertIn("• /access — Показать выданные доступы", text)
             self.assertNotIn("• /polit — Polit", text)
+            self.assertNotIn("hidden_proxy", text)
+            self.assertNotIn("Hidden Proxy", text)
             self.assertNotIn("/grant", text)
             self.assertNotIn("/revoke", text)
             self.assertNotIn("/chatid", text)
@@ -376,15 +384,255 @@ class HelpCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(message.answers, [NO_BOT_ACCESS_MESSAGE])
 
 
-def _settings(*, admin_ids: frozenset[int]) -> BotSettings:
+class ServersCommandTest(unittest.IsolatedAsyncioTestCase):
+    async def test_start_hides_topics_bound_to_hidden_servers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/start", from_user_id=1)
+
+            await handle_start(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_topics_with_hidden_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("• Test (test)", text)
+            self.assertIn("• Polit (polit)", text)
+            self.assertNotIn("Hidden Mode", text)
+            self.assertNotIn("hidden_mode", text)
+
+    async def test_servers_hides_hidden_servers_for_superadmin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/servers", from_user_id=1)
+
+            await handle_servers(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("• /test — Test", text)
+            self.assertIn("• /polit — Polit", text)
+            self.assertNotIn("hidden_proxy", text)
+            self.assertNotIn("Hidden Proxy", text)
+
+    async def test_servers_shows_only_accessible_non_hidden_servers_for_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/servers", from_user_id=2)
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+            store.grant_access(2, "test")
+
+            await handle_servers(
+                message,
+                settings=_settings(admin_ids=frozenset({1})),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=store,
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(message.answers, ["Доступные серверы:\n• /test — Test"])
+
+
+class AliasTargetServerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_topic_alias_can_target_hidden_server_after_topic_access_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage(
+                "sync Gendalf2475",
+                from_user_id=2,
+                message_thread_id=1,
+            )
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+            store.grant_access(2, "test")
+
+            await handle_topic_text_command(
+                message,
+                settings=_settings(admin_ids=frozenset({1}), dry_run=True),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=store,
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("Requested topic: test (Test)", text)
+            self.assertIn("Actual target server: hidden_proxy (Hidden Proxy)", text)
+            self.assertIn("Input alias: sync", text)
+            self.assertIn("RCON-команда: say Sync Gendalf2475", text)
+            self.assertIn("show_response: false", text)
+
+    async def test_topic_alias_checks_requested_topic_before_target_server(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage(
+                "sync Gendalf2475",
+                from_user_id=3,
+                message_thread_id=1,
+            )
+
+            await handle_topic_text_command(
+                message,
+                settings=_settings(admin_ids=frozenset({1}), dry_run=True),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+            )
+
+            self.assertEqual(message.answers, ["⛔ У вас нет доступа к режиму Test."])
+
+    async def test_superadmin_can_use_targeted_alias_from_any_bound_topic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage(
+                "sync Gendalf2475",
+                from_user_id=1,
+                message_thread_id=2,
+            )
+
+            await handle_topic_text_command(
+                message,
+                settings=_settings(admin_ids=frozenset({1}), dry_run=True),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=TopicAccessStore(Path(tmp_dir) / "topic_access.yml"),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("Requested topic: polit (Polit)", text)
+            self.assertIn("Actual target server: hidden_proxy (Hidden Proxy)", text)
+
+    async def test_server_command_alias_can_target_hidden_server(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            message = _AnsweringMessage("/test sync Gendalf2475", from_user_id=2)
+            store = TopicAccessStore(Path(tmp_dir) / "topic_access.yml")
+            store.grant_access(2, "test")
+
+            await handle_server_command(
+                message,
+                settings=_settings(admin_ids=frozenset({1}), dry_run=True),
+                servers_config=_servers_config(),
+                topics_config=_multi_topics_config(),
+                topic_access_store=store,
+                bot_commands_config=load_bot_commands_config(Path(tmp_dir)),
+            )
+
+            self.assertEqual(len(message.answers), 1)
+            text = message.answers[0]
+            self.assertIn("Requested server: test (Test)", text)
+            self.assertIn("Actual target server: hidden_proxy (Hidden Proxy)", text)
+            self.assertIn("Input alias: sync", text)
+            self.assertIn("RCON-команда: say Sync Gendalf2475", text)
+            self.assertIn("show_response: false", text)
+
+
+class ServersConfigParsingTest(unittest.TestCase):
+    def test_hidden_server_and_alias_target_server_are_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _write_servers_yml(
+                Path(tmp_dir),
+                """
+servers:
+  test:
+    display_name: Test
+    host: 127.0.0.1
+    port: 25575
+    password: password
+    telegram_command: test
+  hidden_proxy:
+    display_name: Hidden Proxy
+    host: 127.0.0.1
+    port: 25578
+    password: password
+    telegram_command: hidden_proxy
+    hidden: true
+command_aliases:
+  sync:
+    input: sync
+    execute: "say Sync {args}"
+    show_response: false
+    enabled: true
+    access: admin
+    target_server: hidden_proxy
+    description: Выполнить sync
+""",
+            )
+
+            config = load_servers_config(Path(tmp_dir))
+
+            self.assertTrue(config.servers["hidden_proxy"].hidden)
+            self.assertEqual(config.command_aliases["sync"].target_server, "hidden_proxy")
+
+    def test_hidden_must_be_bool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _write_servers_yml(
+                Path(tmp_dir),
+                """
+servers:
+  test:
+    display_name: Test
+    host: 127.0.0.1
+    port: 25575
+    password: password
+    telegram_command: test
+    hidden: "yes"
+command_aliases:
+  list:
+    input: list
+    execute: list
+""",
+            )
+
+            with self.assertRaisesRegex(ConfigError, "hidden сервера test должен быть bool."):
+                load_servers_config(Path(tmp_dir))
+
+    def test_unknown_alias_target_server_fails_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _write_servers_yml(
+                Path(tmp_dir),
+                """
+servers:
+  test:
+    display_name: Test
+    host: 127.0.0.1
+    port: 25575
+    password: password
+    telegram_command: test
+command_aliases:
+  sync:
+    input: sync
+    execute: "say Sync {args}"
+    target_server: hidden_proxy2
+""",
+            )
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                "Alias sync references unknown target_server hidden_proxy2.",
+            ):
+                load_servers_config(Path(tmp_dir))
+
+
+def _settings(*, admin_ids: frozenset[int], dry_run: bool = False) -> BotSettings:
     return BotSettings(
         telegram_bot_token="token",
         allowed_chat_id=1,
         admin_ids=admin_ids,
         command_cooldown_seconds=0,
         rcon_timeout_seconds=5,
-        dry_run=False,
+        dry_run=dry_run,
     )
+
+
+def _write_servers_yml(base_dir: Path, content: str) -> None:
+    (base_dir / "servers.yml").write_text(content.strip() + "\n", encoding="utf-8")
 
 
 def _topics_config() -> TopicsConfig:
@@ -421,6 +669,24 @@ def _multi_topics_config() -> TopicsConfig:
     )
 
 
+def _topics_with_hidden_config() -> TopicsConfig:
+    config = _multi_topics_config()
+    hidden_topic = TopicConfig(
+        key="hidden_mode",
+        display_name="Hidden Mode",
+        server_key="hidden_proxy",
+        thread_id=3,
+    )
+    return TopicsConfig(
+        topics={**config.topics, "hidden_mode": hidden_topic},
+        topics_by_thread_id={**config.topics_by_thread_id, 3: hidden_topic},
+        topics_by_server_key={
+            **config.topics_by_server_key,
+            "hidden_proxy": hidden_topic,
+        },
+    )
+
+
 def _servers_config() -> ServersConfig:
     test_server = ServerConfig(
         key="test",
@@ -437,6 +703,15 @@ def _servers_config() -> ServersConfig:
         port=25576,
         password="password",
         telegram_command="polit",
+    )
+    hidden_server = ServerConfig(
+        key="hidden_proxy",
+        display_name="Hidden Proxy",
+        host="127.0.0.1",
+        port=25578,
+        password="password",
+        telegram_command="hidden_proxy",
+        hidden=True,
     )
     ban_alias = CommandAlias(
         key="ban",
@@ -468,18 +743,39 @@ def _servers_config() -> ServersConfig:
         access=ALIAS_ACCESS_ADMIN,
         description="Отключённая команда",
     )
+    sync_alias = CommandAlias(
+        key="sync",
+        input="sync",
+        execute="say Sync {args}",
+        show_response=False,
+        success_message="✅ Sync выполнен.",
+        enabled=True,
+        access=ALIAS_ACCESS_ADMIN,
+        description="Выполнить sync",
+        target_server="hidden_proxy",
+    )
     return ServersConfig(
-        servers={"test": test_server, "polit": polit_server},
-        servers_by_command={"test": test_server, "polit": polit_server},
+        servers={
+            "test": test_server,
+            "polit": polit_server,
+            "hidden_proxy": hidden_server,
+        },
+        servers_by_command={
+            "test": test_server,
+            "polit": polit_server,
+            "hidden_proxy": hidden_server,
+        },
         command_aliases={
             "ban": ban_alias,
             "root": root_alias,
             "disabled": disabled_alias,
+            "sync": sync_alias,
         },
         command_aliases_by_input={
             "ban": ban_alias,
             "root": root_alias,
             "disabled": disabled_alias,
+            "sync": sync_alias,
         },
         source_path=Path("servers.yml"),
         source_exists=True,
@@ -601,6 +897,7 @@ class _AnsweringMessage(SimpleNamespace):
         *,
         from_user_id: int | None = None,
         reply_user_id: int | None = None,
+        message_thread_id: int | None = None,
     ) -> None:
         from_user = None
         if from_user_id is not None:
@@ -608,7 +905,12 @@ class _AnsweringMessage(SimpleNamespace):
         reply_to_message = None
         if reply_user_id is not None:
             reply_to_message = SimpleNamespace(from_user=SimpleNamespace(id=reply_user_id))
-        super().__init__(text=text, from_user=from_user, reply_to_message=reply_to_message)
+        super().__init__(
+            text=text,
+            from_user=from_user,
+            reply_to_message=reply_to_message,
+            message_thread_id=message_thread_id,
+        )
         self.answers: list[str] = []
 
     async def answer(self, text: str) -> None:

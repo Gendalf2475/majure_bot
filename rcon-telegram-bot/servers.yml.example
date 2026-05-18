@@ -5,6 +5,7 @@ servers:
     port: 25576
     password: "CHANGE_ME"
     telegram_command: "test"
+    hidden: false
 
   polit:
     display_name: "Полит"
@@ -12,6 +13,15 @@ servers:
     port: 25577
     password: "CHANGE_ME"
     telegram_command: "polit"
+    hidden: false
+
+  hidden_proxy:
+    display_name: "Hidden Proxy"
+    host: "127.0.0.1"
+    port: 25578
+    password: "CHANGE_ME"
+    telegram_command: "hidden_proxy"
+    hidden: true
 
 command_aliases:
   ban:
@@ -45,6 +55,16 @@ command_aliases:
     enabled: true
     access: "admin"
     description: "Отправить сообщение в чат сервера"
+
+  sync:
+    input: "sync"
+    execute: "say Sync {args}"
+    show_response: false
+    success_message: "✅ Sync выполнен."
+    enabled: true
+    access: "admin"
+    target_server: "hidden_proxy"
+    description: "Выполнить sync на скрытом сервере"
 
   clearmoder:
     input: "clearmoder"

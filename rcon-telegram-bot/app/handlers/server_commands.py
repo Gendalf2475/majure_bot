@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.types import Message
 
 from app.config.bot_commands import BotCommandsConfig
-from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServersConfig
+from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServerConfig, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
 from app.services.server_service import execute_server_command, get_server_by_command
@@ -15,6 +17,7 @@ from app.services.topic_access_service import (
     is_superadmin,
 )
 from app.utils.validation import (
+    ParsedAliasCommand,
     is_service_command,
     parse_alias_command,
     parse_telegram_command,
@@ -22,6 +25,7 @@ from app.utils.validation import (
 
 
 server_commands_router = Router()
+logger = logging.getLogger(__name__)
 
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
 DISABLED_COMMAND_MESSAGE = "❌ Эта команда временно отключена."
@@ -51,20 +55,20 @@ async def handle_server_command(
         return
 
     # Telegram-команда должна совпасть с telegram_command одного из серверов.
-    server = get_server_by_command(command, servers_config)
-    if server is None:
+    requested_server = get_server_by_command(command, servers_config)
+    if requested_server is None:
         await message.answer("❌ Сервер не найден.")
         return
 
-    topic = topics_config.topics_by_server_key.get(server.key)
+    topic = topics_config.topics_by_server_key.get(requested_server.key)
     if not _can_use_server_mode(user_id, topic, settings, topic_access_store):
-        await message.answer(f"⛔ У вас нет доступа к режиму {server.display_name}.")
+        await message.answer(f"⛔ У вас нет доступа к режиму {requested_server.display_name}.")
         return
 
     if not arguments:
         await message.answer(
             "❌ Укажите алиас команды.\n"
-            f"Пример: /{server.telegram_command} list"
+            f"Пример: /{requested_server.telegram_command} list"
         )
         return
 
@@ -84,20 +88,34 @@ async def handle_server_command(
         await message.answer(COMMAND_ACCESS_DENIED_MESSAGE)
         return
 
+    target_server = _get_alias_target_server(
+        parsed_command,
+        requested_server,
+        servers_config,
+    )
     # DRY_RUN полезен для проверки: бот покажет команду, но не отправит её в RCON.
     if settings.dry_run:
         await message.answer(
             "🧪 DRY RUN:\n"
-            f"Сервер: {server.display_name}\n"
+            f"Requested server: {requested_server.key} ({requested_server.display_name})\n"
+            f"Actual target server: {target_server.key} ({target_server.display_name})\n"
             f"Input alias: {parsed_command.input}\n"
             f"{_format_dry_run_commands(parsed_command.rcon_commands)}\n"
             f"show_response: {str(parsed_command.show_response).lower()}"
         )
         return
 
+    logger.info(
+        "RCON alias executed: alias=%s requested_topic=%s requested_server=%s target_server=%s user_id=%s",
+        parsed_command.input,
+        topic.key if topic else "",
+        requested_server.key,
+        target_server.key,
+        user_id,
+    )
     await execute_server_command(
         message,
-        server,
+        target_server,
         parsed_command.rcon_commands,
         settings,
         show_response=parsed_command.show_response,
@@ -122,3 +140,13 @@ def _format_dry_run_commands(rcon_commands: tuple[str, ...]) -> str:
     if len(rcon_commands) == 1:
         return f"RCON-команда: {rcon_commands[0]}"
     return "RCON-команды:\n" + "\n".join(f"• {command}" for command in rcon_commands)
+
+
+def _get_alias_target_server(
+    parsed_command: ParsedAliasCommand,
+    requested_server: ServerConfig,
+    servers_config: ServersConfig,
+) -> ServerConfig:
+    if parsed_command.alias.target_server is None:
+        return requested_server
+    return servers_config.servers[parsed_command.alias.target_server]

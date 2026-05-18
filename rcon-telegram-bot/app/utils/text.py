@@ -32,6 +32,7 @@ def build_server_lines(servers_config: ServersConfig) -> str:
     return "\n".join(
         f"• /{server.telegram_command} — {server.display_name}"
         for server in servers_config.servers.values()
+        if not server.hidden
     )
 
 
@@ -40,6 +41,7 @@ def build_server_command_lines(servers_config: ServersConfig) -> str:
     return "\n".join(
         f"• /{server.telegram_command} — {server.display_name}"
         for server in servers_config.servers.values()
+        if not server.hidden
     )
 
 

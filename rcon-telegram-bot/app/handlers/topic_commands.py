@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.config.bot_commands import BotCommandsConfig
-from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServersConfig
+from app.config.servers import ALIAS_ACCESS_SUPERADMIN, ServerConfig, ServersConfig
 from app.config.settings import BotSettings
 from app.config.topics import TopicConfig, TopicsConfig
 from app.services.server_service import execute_server_command
@@ -24,6 +26,7 @@ from app.utils.validation import ParsedAliasCommand, parse_alias_command, parse_
 
 
 topic_commands_router = Router()
+logger = logging.getLogger(__name__)
 
 FORBIDDEN_COMMAND_MESSAGE = "❌ Эта команда запрещена настройками бота."
 DISABLED_COMMAND_MESSAGE = "❌ Эта команда временно отключена."
@@ -85,12 +88,12 @@ async def _execute_topic_alias_command(
     topic_access_store: TopicAccessStore,
 ) -> None:
     user_id = _get_user_id(message)
-    if not can_use_bot_service_commands(user_id, settings, topic_access_store):
-        await message.answer(NO_BOT_ACCESS_MESSAGE)
-        return
-
     topic = await _get_topic_for_message(message, topics_config)
     if topic is None:
+        return
+
+    if not can_use_topic(user_id, topic.key, settings, topic_access_store):
+        await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
         return
 
     if not command_text.strip():
@@ -103,10 +106,6 @@ async def _execute_topic_alias_command(
     )
     if parsed_command is None:
         await message.answer(FORBIDDEN_COMMAND_MESSAGE)
-        return
-
-    if not can_use_topic(user_id, topic.key, settings, topic_access_store):
-        await message.answer(f"⛔ У вас нет доступа к режиму {topic.display_name}.")
         return
 
     if not parsed_command.alias.enabled:
@@ -123,21 +122,33 @@ async def _execute_topic_alias_command(
         await message.answer(COMMAND_ACCESS_DENIED_MESSAGE)
         return
 
-    server = servers_config.servers[topic.server_key]
+    requested_server = servers_config.servers[topic.server_key]
+    target_server = _get_alias_target_server(
+        parsed_command,
+        requested_server,
+        servers_config,
+    )
     if settings.dry_run:
         await message.answer(
             "🧪 DRY RUN:\n"
-            f"Топик: {topic.display_name}\n"
-            f"Сервер: {server.display_name}\n"
+            f"Requested topic: {topic.key} ({topic.display_name})\n"
+            f"Actual target server: {target_server.key} ({target_server.display_name})\n"
             f"Input alias: {parsed_command.input}\n"
             f"{_format_dry_run_commands(parsed_command.rcon_commands)}\n"
             f"show_response: {str(parsed_command.show_response).lower()}"
         )
         return
 
+    logger.info(
+        "RCON alias executed: alias=%s requested_topic=%s target_server=%s user_id=%s",
+        parsed_command.input,
+        topic.key,
+        target_server.key,
+        user_id,
+    )
     await execute_server_command(
         message,
-        server,
+        target_server,
         parsed_command.rcon_commands,
         settings,
         show_response=parsed_command.show_response,
@@ -161,6 +172,16 @@ def _format_dry_run_commands(rcon_commands: tuple[str, ...]) -> str:
     if len(rcon_commands) == 1:
         return f"RCON-команда: {rcon_commands[0]}"
     return "RCON-команды:\n" + "\n".join(f"• {command}" for command in rcon_commands)
+
+
+def _get_alias_target_server(
+    parsed_command: ParsedAliasCommand,
+    requested_server: ServerConfig,
+    servers_config: ServersConfig,
+) -> ServerConfig:
+    if parsed_command.alias.target_server is None:
+        return requested_server
+    return servers_config.servers[parsed_command.alias.target_server]
 
 
 @topic_commands_router.message(Command("grant"))
